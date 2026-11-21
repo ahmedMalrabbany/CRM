@@ -18,7 +18,10 @@ import {
   Save,
   Power,
   RefreshCw,
+  FileSpreadsheet,
 } from 'lucide-react';
+import { GoogleSheetsSyncModal } from '../components/GoogleSheetsSyncModal';
+import { buildFullBackupSheetTabs } from '../services/googleWorkspaceService';
 import {
   DatabaseBackup,
   User,
@@ -74,6 +77,7 @@ export const BackupRestorePage: React.FC<BackupRestorePageProps> = ({ currentUse
 
   const [message, setMessage] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [isGoogleSheetsOpen, setIsGoogleSheetsOpen] = useState(false);
 
   const syncDraftFromSchedule = (cfg: BackupScheduleConfig) => {
     setSchedule(cfg);
@@ -287,6 +291,14 @@ export const BackupRestorePage: React.FC<BackupRestorePageProps> = ({ currentUse
               <Plus className="w-4 h-4" />
             )}
             <span>إنشاء نسخة احتياطية الآن</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsGoogleSheetsOpen(true)}
+            className="px-4 py-2 bg-[#004B87] hover:bg-[#00386B] text-white font-bold text-xs rounded-xl flex items-center gap-1.5 shadow-md transition-all whitespace-nowrap active:scale-95 cursor-pointer"
+          >
+            <FileSpreadsheet className="w-4 h-4 text-[#00E676]" />
+            <span>مزامنة مع Google Sheets</span>
           </button>
         </div>
       </div>
@@ -681,6 +693,18 @@ export const BackupRestorePage: React.FC<BackupRestorePageProps> = ({ currentUse
           </div>,
           document.body
         )}
+
+      <GoogleSheetsSyncModal
+        isOpen={isGoogleSheetsOpen}
+        onClose={() => setIsGoogleSheetsOpen(false)}
+        title="مزامنة قاعدة البيانات مع Google Sheets"
+        subtitle="ربط حساب Google وقراءة أو مزامنة كافة الجداول (الحالات، الممولون، المتصلون، المستخدمون)"
+        defaultNewSheetName={`ETA_CRM_Backup_${new Date().toISOString().slice(0, 10)}`}
+        prepareTabsToWrite={async () => {
+          const { tabs } = await buildFullBackupSheetTabs();
+          return tabs;
+        }}
+      />
     </div>
   );
 };

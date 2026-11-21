@@ -19,7 +19,10 @@ import {
   Clock,
   CheckSquare,
   X,
+  FileSpreadsheet,
 } from 'lucide-react';
+import { GoogleSheetsSyncModal } from '../components/GoogleSheetsSyncModal';
+import { buildReportSheetTabs } from '../services/googleWorkspaceService';
 import { Case, User } from '../types';
 import { exportCasesToExcel } from '../utils/export';
 import { INCOME_TAX_SERVICES, VAT_SERVICES, OTHER_SERVICE_OPTION } from '../data/taxServices';
@@ -95,6 +98,7 @@ export const CasesPage: React.FC<CasesPageProps> = ({
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isBulkClaiming, setIsBulkClaiming] = useState(false);
   const [bulkMessage, setBulkMessage] = useState<string | null>(null);
+  const [isGoogleSheetsOpen, setIsGoogleSheetsOpen] = useState(false);
 
   const serviceTypeOptions = useMemo(() => {
     const set = new Set<string>([
@@ -334,6 +338,16 @@ export const CasesPage: React.FC<CasesPageProps> = ({
             >
               <Download className="w-4 h-4 text-[#00A651]" />
               <span>{language === 'ar' ? 'تصدير Excel' : 'Export CSV'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setIsGoogleSheetsOpen(true)}
+              className="px-3.5 py-2 bg-slate-100 dark:bg-[#071629] hover:bg-[#E6F7EF] dark:hover:bg-[#00386B] text-slate-800 dark:text-slate-200 font-bold text-xs rounded-xl flex items-center gap-1.5 transition-all duration-200 border border-slate-200 dark:border-[#004B87] whitespace-nowrap active:scale-95 cursor-pointer"
+              title="Google Sheets"
+            >
+              <FileSpreadsheet className="w-4 h-4 text-[#00A651]" />
+              <span>Google Sheets</span>
             </button>
 
             <button
@@ -848,6 +862,19 @@ export const CasesPage: React.FC<CasesPageProps> = ({
           </div>
         </div>
       )}
+
+      <GoogleSheetsSyncModal
+        isOpen={isGoogleSheetsOpen}
+        onClose={() => setIsGoogleSheetsOpen(false)}
+        title={language === 'ar' ? 'مزامنة الحالات مع Google Sheets' : 'Sync Cases to Google Sheets'}
+        subtitle={
+          language === 'ar'
+            ? `تصدير أو تحديث ${filteredCases.length} حالة في جدول Google Sheets`
+            : `Sync ${filteredCases.length} filtered cases to Google Sheets`
+        }
+        defaultNewSheetName={`ETA_CRM_Cases_${new Date().toISOString().slice(0, 10)}`}
+        prepareTabsToWrite={() => buildReportSheetTabs(filteredCases)}
+      />
     </div>
   );
 };

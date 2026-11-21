@@ -26,6 +26,8 @@ import { CrmLogo } from '../components/EtaLogo';
 import { Sparkline } from '../components/SkeletonLoader';
 import { isCaseOwnedByUser, isCaseOverdue72Hours } from '../services/caseService';
 import { useThemeLanguage } from '../context/ThemeLanguageContext';
+import { GoogleSheetsSyncModal } from '../components/GoogleSheetsSyncModal';
+import { buildReportSheetTabs } from '../services/googleWorkspaceService';
 
 interface ReportsPageProps {
   cases: Case[];
@@ -47,6 +49,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
   const { language, isRtl } = useThemeLanguage();
   const [dateFilter, setDateFilter] = useState<'today' | 'week' | 'month' | 'year' | 'all'>('all');
   const [showAllStaff, setShowAllStaff] = useState(false);
+  const [isGoogleSheetsOpen, setIsGoogleSheetsOpen] = useState(false);
 
   // Filter cases by date
   const filteredCases = useMemo(() => {
@@ -437,6 +440,15 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
           >
             <FileSpreadsheet className="w-4 h-4 text-white" />
             <span>{language === 'ar' ? 'تصدير Excel' : 'Export Excel'}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setIsGoogleSheetsOpen(true)}
+            className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 shadow-sm transition-colors active:scale-95 cursor-pointer"
+          >
+            <FileSpreadsheet className="w-4 h-4 text-white" />
+            <span>Google Sheets</span>
           </button>
 
           <button
@@ -943,6 +955,41 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
           </table>
         </div>
       </div>
+
+      <GoogleSheetsSyncModal
+        isOpen={isGoogleSheetsOpen}
+        onClose={() => setIsGoogleSheetsOpen(false)}
+        title={language === 'ar' ? 'مزامنة وتصدير التقرير إلى Google Sheets' : 'Sync Report to Google Sheets'}
+        subtitle={
+          language === 'ar'
+            ? `تصدير ${filteredCases.length} حالة ومؤشرات الأداء (${periodLabel}) مباشرة إلى جدول Google Sheets`
+            : `Sync ${filteredCases.length} cases and KPI stats directly to Google Sheets`
+        }
+        defaultNewSheetName={`ETA_CRM_Report_${dateFilter}_${new Date().toISOString().slice(0, 10)}`}
+        prepareTabsToWrite={() =>
+          buildReportSheetTabs(
+            filteredCases,
+            agentPerformance.map((s) => ({
+              fullName: s.fullName,
+              crmUser: s.crmUser,
+              roleLabel:
+                s.role === 'super_admin'
+                  ? 'مدير النظام'
+                  : s.role === 'management'
+                  ? 'مدير إدارة'
+                  : s.role === 'technical_support'
+                  ? 'دعم تقني'
+                  : 'وكيل اتصال',
+              totalHandled: s.totalHandled,
+              openOwnedCount: s.openOwnedCount,
+              totalClosed: s.totalClosed,
+              closeRate:
+                s.totalHandled > 0 ? Math.round((s.totalClosed / s.totalHandled) * 100) : 0,
+            })),
+            periodLabel
+          )
+        }
+      />
     </div>
   );
 };

@@ -158,7 +158,8 @@ async function startServer() {
   try {
     await dbStore.init();
   } catch (err) {
-    console.warn('[db] Failed to initialize primary driver, falling back to local-file:', err);
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(`[db] Primary driver (${dbStore.driverName}) unavailable (${msg}) -> falling back to local-file.`);
     fs.mkdirSync(dataDir, { recursive: true });
     dbStore = new Store(new FileDriver(path.join(dataDir, 'db.json')));
     await dbStore.init();
@@ -1167,11 +1168,17 @@ async function startServer() {
 
   const httpServer = http.createServer(app);
 
-  // Prevent Vite dev middleware from exposing root-level JSON configs or service-account keys
+  // Prevent Vite dev middleware from exposing root-level internal JSON configs or service-account keys
+  const PUBLIC_CLIENT_ROOT_JSON = new Set(['firebase-applet-config.json']);
   app.use((req, res, next) => {
     if (req.path.endsWith('.json') && !req.path.startsWith('/api/')) {
       const rel = req.path.replace(/^\/+/, '');
-      if (rel && !rel.includes('/') && fs.existsSync(path.resolve(__dirname, rel))) {
+      if (
+        rel &&
+        !rel.includes('/') &&
+        !PUBLIC_CLIENT_ROOT_JSON.has(rel) &&
+        fs.existsSync(path.resolve(__dirname, rel))
+      ) {
         res.status(404).end();
         return;
       }
