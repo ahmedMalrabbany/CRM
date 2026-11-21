@@ -1,0 +1,294 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Call center staff and system administrators",
+      "type": "object",
+      "properties": {
+        "username": { "type": "string", "maxLength": 50, "description": "Login username or National ID" },
+        "fullName": { "type": "string", "maxLength": 100, "description": "Full Arabic name" },
+        "role": { "type": "string", "enum": ["super_admin", "agent", "management", "technical_support"], "description": "User permission role" },
+        "crmUser": { "type": "string", "maxLength": 50, "description": "CRM username identifier" },
+        "passwordHash": { "type": "string", "maxLength": 128, "description": "Hashed password" },
+        "salt": { "type": "string", "maxLength": 64, "description": "Security salt" },
+        "status": { "type": "string", "enum": ["active", "disabled"], "description": "Account status" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Last update timestamp" },
+        "lastLoginAt": { "type": "string", "format": "date-time", "description": "Last successful login timestamp" },
+        "isOnline": { "type": "boolean", "description": "Live online presence flag" },
+        "lastActiveAt": { "type": "string", "format": "date-time", "description": "Last heartbeat active timestamp" }
+      },
+      "required": ["username", "fullName", "role", "crmUser", "status", "passwordHash"]
+    },
+    "Taxpayer": {
+      "title": "Taxpayer",
+      "description": "Registered taxpayer entity keyed by 9-digit tax registration number",
+      "type": "object",
+      "properties": {
+        "taxRegistrationNumber": { "type": "string", "pattern": "^[0-9]{9}$", "description": "Exactly 9 digits tax registration number" },
+        "name": { "type": "string", "maxLength": 150, "description": "Taxpayer or company name" },
+        "taxType": { "type": "string", "maxLength": 50, "description": "Primary tax category" },
+        "city": { "type": "string", "maxLength": 100, "description": "Tax district or governorate" },
+        "notes": { "type": "string", "maxLength": 500, "description": "Taxpayer special notes" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["taxRegistrationNumber", "name"]
+    },
+    "Caller": {
+      "title": "Caller",
+      "description": "Caller person associated with cases and taxpayers",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "minLength": 2, "maxLength": 100, "description": "Caller name" },
+        "title": { "type": "string", "maxLength": 50, "description": "Caller title (أستاذ, محاسب, شريك, إلخ)" },
+        "classification": { "type": "string", "enum": ["شخص طبيعي", "شخص اعتباري"], "description": "Classification" },
+        "taxRegistrationNumber": { "type": "string", "pattern": "^[0-9]{9}$", "description": "Linked 9-digit tax number" },
+        "primaryPhone": { "type": "string", "maxLength": 20, "description": "Primary phone number" },
+        "secondaryPhone": { "type": "string", "maxLength": 20, "description": "Secondary phone number" },
+        "emailAvailability": { "type": "string", "enum": ["متوفر", "غير متوفر"] },
+        "email": { "type": "string", "maxLength": 100, "description": "Email if available" },
+        "description": { "type": "string", "maxLength": 1000, "description": "Caller notes and extra info" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "title", "classification", "primaryPhone"]
+    },
+    "Case": {
+      "title": "Case",
+      "description": "Customer Relationship Management Case record",
+      "type": "object",
+      "properties": {
+        "caseId": { "type": "string", "pattern": "^CRM-[0-9]{6}$", "description": "Global sequential identifier" },
+        "callType": { "type": "string", "enum": ["طلب", "استفسار", "شكوى", "رسائل SMS"] },
+        "taxType": { "type": "string", "enum": ["ضرائب دخل", "ضرائب قيمة مضافة"] },
+        "serviceType": { "type": "string", "maxLength": 100 },
+        "channel": { "type": "string", "enum": ["اتصال هاتفي", "بريد إلكتروني"] },
+        "title": { "type": "string", "minLength": 3, "maxLength": 200, "description": "Normalized Arabic case title" },
+        "rawTitle": { "type": "string", "maxLength": 200 },
+        "taxRegistrationNumber": { "type": "string", "pattern": "^[0-9]{9}$" },
+        "taxpayerName": { "type": "string", "maxLength": 150 },
+        "callerId": { "type": "string", "maxLength": 100 },
+        "callerName": { "type": "string", "maxLength": 100 },
+        "callerPhone": { "type": "string", "maxLength": 20 },
+        "status": { "type": "string", "enum": ["جديدة", "مفتوحة", "قيد المعالجة", "محولة للإدارة", "محولة للدعم الفني", "محولة لوكيل الاتصال", "قيد الانتظار", "مغلقة"] },
+        "priority": { "type": "string", "enum": ["عادي", "هام", "عاجل"] },
+        "agentNotes": { "type": "string", "maxLength": 3000 },
+        "agentReply": { "type": "string", "maxLength": 3000 },
+        "agentEmployeeName": { "type": "string", "maxLength": 100 },
+        "managementReply": { "type": "string", "maxLength": 3000 },
+        "managementEmployeeName": { "type": "string", "maxLength": 100 },
+        "attachments": { "type": "array", "description": "Metadata references to uploaded case attachments stored on server" },
+        "assignedTo": { "type": "string", "maxLength": 100 },
+        "assignedToRole": { "type": "string", "maxLength": 50 },
+        "assignedToName": { "type": "string", "maxLength": 100 },
+        "closeReason": { "type": "string", "maxLength": 500 },
+        "closedAt": { "type": "string", "format": "date-time" },
+        "closedBy": { "type": "string", "maxLength": 100 },
+        "closedByName": { "type": "string", "maxLength": 100 },
+        "createdById": { "type": "string", "maxLength": 100 },
+        "createdByName": { "type": "string", "maxLength": 100 },
+        "createdByCrmUser": { "type": "string", "maxLength": 50 },
+        "createdByRole": { "type": "string", "maxLength": 50 },
+        "updatedById": { "type": "string", "maxLength": 100 },
+        "updatedByName": { "type": "string", "maxLength": 100 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "isDeleted": { "type": "boolean" }
+      },
+      "required": ["caseId", "callType", "taxType", "serviceType", "channel", "title", "taxRegistrationNumber", "callerName", "status"]
+    },
+    "TimelineEvent": {
+      "title": "TimelineEvent",
+      "description": "Immutable chronological case action record",
+      "type": "object",
+      "properties": {
+        "caseId": { "type": "string" },
+        "action": { "type": "string", "maxLength": 100 },
+        "previousStatus": { "type": "string", "maxLength": 50 },
+        "newStatus": { "type": "string", "maxLength": 50 },
+        "notes": { "type": "string", "maxLength": 1000 },
+        "userId": { "type": "string", "maxLength": 100 },
+        "userName": { "type": "string", "maxLength": 100 },
+        "userCrmUser": { "type": "string", "maxLength": 50 },
+        "userRole": { "type": "string", "maxLength": 50 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["caseId", "action", "userName", "createdAt"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "Real-time user notification",
+      "type": "object",
+      "properties": {
+        "recipientUsername": { "type": "string", "maxLength": 50 },
+        "recipientName": { "type": "string", "maxLength": 100 },
+        "recipientRole": { "type": "string", "maxLength": 50 },
+        "caseId": { "type": "string", "maxLength": 50 },
+        "title": { "type": "string", "maxLength": 100 },
+        "message": { "type": "string", "maxLength": 500 },
+        "isRead": { "type": "boolean" },
+        "type": { "type": "string", "enum": ["transfer", "assign", "response", "close", "reopen", "admin_notice", "overdue_alert"] },
+        "senderName": { "type": "string", "maxLength": 100 },
+        "senderUsername": { "type": "string", "maxLength": 50 },
+        "senderRole": { "type": "string", "maxLength": 50 },
+        "batchId": { "type": "string", "maxLength": 100 },
+        "requiresAcknowledgment": { "type": "boolean" },
+        "acknowledged": { "type": "boolean" },
+        "acknowledgedAt": { "type": "string", "format": "date-time" },
+        "acknowledgedByName": { "type": "string", "maxLength": 100 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["recipientUsername", "title", "message", "isRead"]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "System-wide activity and security log",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "maxLength": 100 },
+        "username": { "type": "string", "maxLength": 100 },
+        "fullName": { "type": "string", "maxLength": 100 },
+        "role": { "type": "string", "maxLength": 50 },
+        "action": { "type": "string", "maxLength": 100 },
+        "recordId": { "type": "string", "maxLength": 100 },
+        "device": { "type": "string", "maxLength": 200 },
+        "details": { "type": "string", "maxLength": 2000 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["action", "createdAt"]
+    },
+    "SystemSetting": {
+      "title": "SystemSetting",
+      "description": "Configurable system preferences and automatic backup schedule",
+      "type": "object",
+      "properties": {
+        "sessionTimeoutMinutes": { "type": "number" },
+        "allowDuplicateCases": { "type": "boolean" },
+        "autoAssignEnabled": { "type": "boolean" },
+        "systemNotice": { "type": "string", "maxLength": 500 },
+        "slaHoursNormal": { "type": "number" },
+        "slaHoursUrgent": { "type": "number" },
+        "enabled": { "type": "boolean" },
+        "frequency": { "type": "string", "enum": ["daily", "weekly", "monthly", "interval_hours"] },
+        "timeOfDay": { "type": "string", "maxLength": 10 },
+        "dayOfWeek": { "type": "number" },
+        "dayOfMonth": { "type": "number" },
+        "intervalHours": { "type": "number" },
+        "autoDownloadJson": { "type": "boolean" },
+        "maxRetentionCount": { "type": "number" },
+        "lastRunAt": { "type": "string", "format": "date-time" },
+        "lastRunKey": { "type": "string", "maxLength": 100 },
+        "lastBackupId": { "type": "string", "maxLength": 100 },
+        "lastBackupName": { "type": "string", "maxLength": 150 },
+        "nextScheduledAt": { "type": "string", "format": "date-time" },
+        "isPaused": { "type": "boolean" },
+        "pausedUntil": { "type": ["string", "null"], "format": "date-time" },
+        "pauseReason": { "type": "string", "maxLength": 300 },
+        "pausedBy": { "type": "string", "maxLength": 100 },
+        "pausedByName": { "type": "string", "maxLength": 100 },
+        "pausedAt": { "type": "string", "format": "date-time" },
+        "updatedBy": { "type": "string", "maxLength": 100 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "Counter": {
+      "title": "Counter",
+      "description": "Global atomic counter for sequential identifiers",
+      "type": "object",
+      "properties": {
+        "currentValue": { "type": "number" },
+        "lastUpdated": { "type": "string", "format": "date-time" }
+      },
+      "required": ["currentValue"]
+    },
+    "Backup": {
+      "title": "Backup",
+      "description": "Database snapshot backup metadata",
+      "type": "object",
+      "properties": {
+        "backupName": { "type": "string", "maxLength": 100 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "createdBy": { "type": "string", "maxLength": 100 },
+        "triggerType": { "type": "string", "enum": ["manual", "automatic"] },
+        "recordsCount": { "type": "number" },
+        "dataSnapshot": { "type": "string", "description": "Serialized JSON snapshot or Storage ref" }
+      },
+      "required": ["backupName", "createdAt", "recordsCount"]
+    },
+    "TeamChatMessage": {
+      "title": "TeamChatMessage",
+      "description": "Real-time quick help chat message between Call Agents and Management & Technical Support",
+      "type": "object",
+      "properties": {
+        "senderId": { "type": "string", "maxLength": 100 },
+        "senderUsername": { "type": "string", "maxLength": 50 },
+        "senderName": { "type": "string", "maxLength": 100 },
+        "senderRole": { "type": "string", "enum": ["super_admin", "agent", "management", "technical_support"] },
+        "recipientId": { "type": "string", "maxLength": 100 },
+        "recipientUsername": { "type": "string", "maxLength": 50 },
+        "recipientName": { "type": "string", "maxLength": 100 },
+        "targetUsername": { "type": "string", "maxLength": 50 },
+        "targetName": { "type": "string", "maxLength": 100 },
+        "message": { "type": "string", "minLength": 0, "maxLength": 2000 },
+        "attachments": { "type": "array", "description": "Metadata references to uploaded chat documents or images" },
+        "urgency": { "type": "string", "enum": ["normal", "urgent"] },
+        "caseId": { "type": "string", "maxLength": 50 },
+        "replyToId": { "type": "string", "maxLength": 128 },
+        "replyToSenderName": { "type": "string", "maxLength": 100 },
+        "replyToSenderUsername": { "type": "string", "maxLength": 50 },
+        "replyToMessage": { "type": "string", "maxLength": 300 },
+        "mentions": { "type": "array", "description": "Mentioned usernames" },
+        "readByUsernames": { "type": "array", "description": "Usernames of users who read the message" },
+        "readByDetails": { "type": "array", "description": "Detailed read receipt metadata" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["senderId", "senderUsername", "senderName", "senderRole", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "System users and call center agents"
+    },
+    "/taxpayers/{taxpayerId}": {
+      "schema": "Taxpayer",
+      "description": "Taxpayer registry"
+    },
+    "/callers/{callerId}": {
+      "schema": "Caller",
+      "description": "Caller details registry"
+    },
+    "/cases/{caseId}": {
+      "schema": "Case",
+      "description": "CRM support and inquiry tickets"
+    },
+    "/cases/{caseId}/timeline/{timelineId}": {
+      "schema": "TimelineEvent",
+      "description": "Case historical event logs"
+    },
+    "/counters/{counterId}": {
+      "schema": "Counter",
+      "description": "Atomic counters for sequential case numbering"
+    },
+    "/notifications/{notificationId}": {
+      "schema": "Notification",
+      "description": "User notification alerts"
+    },
+    "/auditLogs/{logId}": {
+      "schema": "AuditLog",
+      "description": "Immutable security and action audit log"
+    },
+    "/settings/{settingId}": {
+      "schema": "SystemSetting",
+      "description": "System-wide parameters"
+    },
+    "/backups/{backupId}": {
+      "schema": "Backup",
+      "description": "Database backup archives"
+    },
+    "/teamChatMessages/{messageId}": {
+      "schema": "TeamChatMessage",
+      "description": "Real-time quick support chat messages between Call Agents and Management & Technical Support"
+    }
+  }
+}

@@ -1,0 +1,91 @@
+<svg width="240" height="240" viewBox="0 0 240 240" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="rimGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stopColor="#00E676" />
+      <stop offset="35%" stopColor="#00A651" />
+      <stop offset="70%" stopColor="#0284C7" />
+      <stop offset="100%" stopColor="#00E676" />
+    </linearGradient>
+    <linearGradient id="bgGrad" x1="15%" y1="5%" x2="85%" y2="95%">
+      <stop offset="0%" stopColor="#001226" />
+      <stop offset="45%" stopColor="#00264D" />
+      <stop offset="100%" stopColor="#003F7A" />
+    </linearGradient>
+    <radialGradient id="ambientGlow" cx="50%" cy="46%" r="48%">
+      <stop offset="0%" stopColor="#00E676" stopOpacity="0.28" />
+      <stop offset="55%" stopColor="#0284C7" stopOpacity="0.14" />
+      <stop offset="100%" stopColor="#001226" stopOpacity="0" />
+    </radialGradient>
+    <linearGradient id="glassSheen" x1="50%" y1="0%" x2="50%" y2="100%">
+      <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.22" />
+      <stop offset="100%" stopColor="#FFFFFF" stopOpacity="0.0" />
+    </linearGradient>
+    <linearGradient id="emeraldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stopColor="#10B981" />
+      <stop offset="40%" stopColor="#00D66C" />
+      <stop offset="100%" stopColor="#008742" />
+    </linearGradient>
+    <linearGradient id="neonEmerald" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stopColor="#6EE7B7" />
+      <stop offset="50%" stopColor="#00E676" />
+      <stop offset="100%" stopColor="#009E4C" />
+    </linearGradient>
+    <linearGradient id="cardWhite" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stopColor="#FFFFFF" />
+      <stop offset="100%" stopColor="#E0F2FE" />
+    </linearGradient>
+    <linearGradient id="headbandGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stopColor="#E2E8F0" />
+      <stop offset="50%" stopColor="#FFFFFF" />
+      <stop offset="100%" stopColor="#BAE6FD" />
+    </linearGradient>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stopColor="#FDE047" />
+      <stop offset="100%" stopColor="#F59E0B" />
+    </linearGradient>
+  </defs>
+
+  <rect x="10" y="10" width="220" height="220" rx="54" fill="url(#rimGrad)" />
+  <rect x="15" y="15" width="210" height="210" rx="49" fill="url(#bgGrad)" />
+  <rect x="22" y="22" width="196" height="196" rx="43" fill="none" stroke="#38BDF8" strokeWidth="1.2" strokeOpacity="0.22" />
+  <circle cx="120" cy="114" r="94" fill="url(#ambientGlow)" />
+  <path d="M 15 64 C 15 36.938 36.938 15 64 15 L 176 15 C 203.062 15 225 36.938 225 64 L 225 84 C 175 104 65 104 15 84 Z" fill="url(#glassSheen)" />
+
+  <circle cx="96" cy="34" r="3" fill="url(#goldGrad)" />
+  <path d="M 120 25 L 123 31 L 129 34 L 123 37 L 120 43 L 117 37 L 111 34 L 117 31 Z" fill="url(#goldGrad)" />
+  <circle cx="144" cy="34" r="3" fill="url(#goldGrad)" />
+
+  <path d="M 26 106 A 22 22 0 0 0 26 138" stroke="#00E676" strokeWidth="3" strokeLinecap="round" strokeOpacity="0.7" />
+  <path d="M 214 106 A 22 22 0 0 1 214 138" stroke="#00E676" strokeWidth="3" strokeLinecap="round" strokeOpacity="0.7" />
+
+  <path d="M 48 122 C 48 74 78 46 120 46 C 162 46 192 74 192 122" stroke="url(#headbandGrad)" strokeWidth="10" strokeLinecap="round" fill="none" />
+  <path d="M 54 118 C 54 77 81 52 120 52 C 159 52 186 77 186 118" stroke="url(#neonEmerald)" strokeWidth="3.5" strokeLinecap="round" fill="none" />
+  <path d="M 92 48 Q 120 41 148 48" stroke="url(#emeraldGrad)" strokeWidth="8" strokeLinecap="round" fill="none" />
+
+  <path d="M 66 84 C 66 74.059 74.059 66 84 66 L 136 66 C 145.941 66 154 74.059 154 84 L 154 116 C 154 125.941 145.941 134 136 134 L 98 134 L 78 148 L 80 134 C 72.163 132.5 66 125.046 66 116 Z" fill="url(#cardWhite)" />
+  <circle cx="86" cy="88" r="7.5" fill="#00386B" />
+  <rect x="100" y="81" width="38" height="5.5" rx="2.75" fill="#00386B" />
+  <rect x="100" y="90" width="24" height="5" rx="2.5" fill="#00A651" />
+  <rect x="80" y="108" width="6" height="12" rx="3" fill="#0284C7" />
+  <rect x="91" y="103" width="6" height="17" rx="3" fill="#00A651" />
+  <rect x="102" y="106" width="6" height="14" rx="3" fill="#00386B" />
+  <rect x="113" y="101" width="6" height="19" rx="3" fill="#00A651" />
+  <rect x="124" y="107" width="6" height="13" rx="3" fill="#0284C7" />
+
+  <path d="M 104 108 C 104 99.163 111.163 92 120 92 L 160 92 C 168.837 92 176 99.163 176 108 L 176 136 C 176 144.837 168.837 152 160 152 L 156 152 L 164 164 L 142 152 L 120 152 C 111.163 152 104 144.837 104 136 Z" fill="url(#emeraldGrad)" stroke="#001B36" strokeWidth="3.5" />
+  <path d="M 124 122 L 135 133 L 157 111" stroke="#FFFFFF" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+
+  <rect x="48" y="102" width="12" height="42" rx="6" fill="#001B36" stroke="#38BDF8" strokeWidth="1.5" />
+  <rect x="34" y="98" width="20" height="50" rx="10" fill="url(#neonEmerald)" stroke="#FFFFFF" strokeWidth="2" />
+  <rect x="180" y="102" width="12" height="42" rx="6" fill="#001B36" stroke="#38BDF8" strokeWidth="1.5" />
+  <rect x="186" y="98" width="20" height="50" rx="10" fill="url(#neonEmerald)" stroke="#FFFFFF" strokeWidth="2" />
+
+  <path d="M 44 146 C 44 169 68 178 104 178" stroke="url(#headbandGrad)" strokeWidth="6" strokeLinecap="round" fill="none" />
+  <rect x="100" y="169" width="30" height="18" rx="9" fill="url(#neonEmerald)" stroke="#FFFFFF" strokeWidth="2" />
+  <circle cx="115" cy="178" r="3.5" fill="#FFFFFF" />
+
+  <rect x="56" y="193" width="128" height="25" rx="12.5" fill="#001226" stroke="url(#neonEmerald)" strokeWidth="2" />
+  <text x="120" y="210" textAnchor="middle" fill="#FFFFFF" fontFamily="system-ui, -apple-system, sans-serif" fontWeight="900" fontSize="14.5" letterSpacing="0.8">
+    CRM • 16395
+  </text>
+</svg>

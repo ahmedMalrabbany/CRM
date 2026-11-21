@@ -1,0 +1,66 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Users Collection - Staff and Agents
+    match /users/{userId} {
+      allow read, create, update, delete: if true;
+    }
+
+    // CRM Cases
+    match /cases/{caseId} {
+      allow read, create, update, delete: if true;
+
+      // Subcollection timeline - strictly immutable once written
+      match /timeline/{timelineId} {
+        allow read, create: if true;
+        allow update, delete: if false;
+      }
+    }
+
+    // Taxpayers / Customers Directory
+    match /taxpayers/{taxpayerId} {
+      allow read, create, update, delete: if true;
+    }
+
+    // Callers Directory
+    match /callers/{callerId} {
+      allow read, create, update, delete: if true;
+    }
+
+    // Counters for sequential case numbering
+    match /counters/{counterId} {
+      allow read, write: if true;
+    }
+
+    // Notifications
+    match /notifications/{notificationId} {
+      allow read, write: if true;
+    }
+
+    // Audit Logs - append only
+    match /auditLogs/{logId} {
+      allow read, create: if true;
+      allow update, delete: if false;
+    }
+
+    // System Settings
+    match /settings/{settingId} {
+      allow read, write: if true;
+    }
+
+    // Backups
+    match /backups/{backupId} {
+      allow read, write: if true;
+    }
+
+    // Team Quick Help Chat Messages
+    match /teamChatMessages/{messageId} {
+      allow read, create, update, delete: if true;
+    }
+  }
+}
