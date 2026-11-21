@@ -21,7 +21,7 @@ export default defineConfig(() => {
       {
         name: 'emit-app-version',
         writeBundle(options) {
-          const outDir = options.dir ? path.resolve(options.dir) : path.resolve(__dirname, 'dist');
+          const outDir = options.dir ? path.resolve(options.dir) : path.resolve(import.meta.dirname, 'dist');
           fs.mkdirSync(outDir, {recursive: true});
           fs.writeFileSync(
             path.join(outDir, 'version.json'),
@@ -117,10 +117,13 @@ export default defineConfig(() => {
     ],
     resolve: {
       alias: {
-        '@': path.resolve(__dirname, '.'),
+        '@': path.resolve(import.meta.dirname, '.'),
       },
     },
     server: {
+      host: '0.0.0.0',
+      port: 3000,
+      allowedHosts: true,
       // HMR is disabled in AI Studio via DISABLE_HMR env var.
       // Do not modifyâfile watching is disabled to prevent flickering during agent edits.
       hmr: process.env.DISABLE_HMR !== 'true',

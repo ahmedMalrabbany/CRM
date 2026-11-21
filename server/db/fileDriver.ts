@@ -7,7 +7,10 @@ import type { DocData } from './core.ts';
 export class FileDriver implements Driver {
   name = 'local-file';
   private state: Record<string, Record<string, DocData>> = {};
-  constructor(private file: string) {}
+  private file: string;
+  constructor(file: string) {
+    this.file = file;
+  }
 
   async load() {
     const out = new Map<string, Map<string, DocData>>();

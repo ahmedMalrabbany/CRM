@@ -37,8 +37,10 @@ export class SheetsDriver implements Driver {
   private fetchImpl: typeof fetch;
   private base: string;
   private jwt?: JWT;
+  private opts: SheetsOptions;
 
-  constructor(private opts: SheetsOptions) {
+  constructor(opts: SheetsOptions) {
+    this.opts = opts;
     this.fetchImpl = opts.fetchImpl ?? fetch;
     this.base = opts.baseUrl ?? 'https://sheets.googleapis.com/v4/spreadsheets';
     if (!opts.getToken) {

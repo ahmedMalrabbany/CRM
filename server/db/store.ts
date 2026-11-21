@@ -3,8 +3,9 @@
  * write-behind persistence (Google Sheets / local file) and change events.
  */
 import { EventEmitter } from 'events';
+import type { DocData, DocRec, Constraint } from './core.ts';
 import {
-  DocData, DocRec, Constraint, applyMerge, applySet, applyUpdate, clone,
+  applyMerge, applySet, applyUpdate, clone,
   collectionInfo, docPathInfo, runQuery,
 } from './core.ts';
 
@@ -26,8 +27,12 @@ export type WriteOp =
   | { op: 'delete'; path: string };
 
 export class DbError extends Error {
-  constructor(public code: string, message: string, public status = 400) {
+  code: string;
+  status: number;
+  constructor(code: string, message: string, status = 400) {
     super(message);
+    this.code = code;
+    this.status = status;
   }
 }
 
@@ -44,9 +49,13 @@ export class Store extends EventEmitter {
   private failures = 0;
   lastFlushError: string | null = null;
   lastFlushAt: string | null = null;
+  private driver: Driver;
+  private flushIntervalMs: number;
 
-  constructor(private driver: Driver, private flushIntervalMs = 3000) {
+  constructor(driver: Driver, flushIntervalMs = 3000) {
     super();
+    this.driver = driver;
+    this.flushIntervalMs = flushIntervalMs;
     this.setMaxListeners(0);
   }
 

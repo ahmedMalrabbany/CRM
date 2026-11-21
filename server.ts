@@ -13,6 +13,7 @@ import { fileURLToPath } from 'url';
 import { GoogleGenAI, ThinkingLevel, Type } from '@google/genai';
 import compression from 'compression';
 import { Store } from './server/db/store.ts';
+import { FileDriver } from './server/db/fileDriver.ts';
 import { createDbRouter, createDriverFromEnv } from './server/db/routes.ts';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -152,8 +153,16 @@ async function startServer() {
   app.use(express.json({ limit: '25mb' }));
 
   // ---- Database: in-memory store synced to Google Sheets (replaces Firestore) ----
-  const dbStore = new Store(createDriverFromEnv(path.resolve(__dirname, 'data')));
-  await dbStore.init();
+  const dataDir = path.resolve(__dirname, 'data');
+  let dbStore = new Store(createDriverFromEnv(dataDir));
+  try {
+    await dbStore.init();
+  } catch (err) {
+    console.warn('[db] Failed to initialize primary driver, falling back to local-file:', err);
+    fs.mkdirSync(dataDir, { recursive: true });
+    dbStore = new Store(new FileDriver(path.join(dataDir, 'db.json')));
+    await dbStore.init();
+  }
   console.log(`[db] driver=${dbStore.driverName} loaded:`, dbStore.stats());
   app.use('/api/db', createDbRouter(dbStore));
   const flushOnExit = async () => {
@@ -1157,6 +1166,18 @@ async function startServer() {
   });
 
   const httpServer = http.createServer(app);
+
+  // Prevent Vite dev middleware from exposing root-level JSON configs or service-account keys
+  app.use((req, res, next) => {
+    if (req.path.endsWith('.json') && !req.path.startsWith('/api/')) {
+      const rel = req.path.replace(/^\/+/, '');
+      if (rel && !rel.includes('/') && fs.existsSync(path.resolve(__dirname, rel))) {
+        res.status(404).end();
+        return;
+      }
+    }
+    next();
+  });
 
   // Vite dev middleware or static production build
   if (!isProduction) {
