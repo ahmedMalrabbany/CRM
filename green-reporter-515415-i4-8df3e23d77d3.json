@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "green-reporter-515415-i4",
+  "private_key_id": "8df3e23d77d3fa044c42b6c57fe5a7afa482b2d9",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDUgNLvqGm8Ed2O\nTwfiAYpOqF6xd8vp4Fctk7vV3OSGIlbcv1Hg2wzo98581CHvZmTPAYC9gB9YkgUu\nmaA47wpsiZj5TiVnN/wt3LDsLbFS0DNTvx7CTwLu/LSjSwQD9DzLBE/SdAqaM69I\n8jBcKWcTOnvC308Z6EGYUWYJ/+2/1nJKHnQ41uiwNakHto1hRGmLhoJMmQzsZUEo\nHXWzgbSuXO1gdkWgjBn8wKCtkFUG4nvoDO0NW9VhuuUCwFm+RC8eZeQPgBd1uYzN\nQMyU2lxJox/QRJQ2VUel+capnC25bDY5azsDO/18r2xDOIl6eqoKF9Wl2N8k4NcQ\n8zknwRexAgMBAAECggEAGhXfvttSsmtTggH1zuKfRJlSuXCCE6kuLmo3iTDKzSPn\nO4URQxvEnY741hYwvbtZJdeSgwCYqHXRRMeHNWHzisAHyxeyi/WBg2w3PCC+RxMH\nb/DysMnD64wSDQb6/NTFBytV9Ji5yfTNADR5pwCOlnvMAC+LHVwnPDBGyTS1TcJn\nG8sOJT3dPial+mbCorv8o/MZTvdSG27+wBCc8qwMh0E5ugAnXkdVx85EQ5w7ze8w\nqaTO44n2w83d9jpEDWLKID5Fj5VB0w9BlHJwA7sq4On/U/Ucuks3FrYmKBbPEWX9\n+eV9bWSwQwQON7iHDXh5SG0cmDCnk5SD7xQdK5GK2QKBgQDxu2M6M/dq2ku7/TRu\ng/uclAicnFf+qcoWnby8xVtub5UOv3G3sg5ubjMSZuEel9elqFS5MmeoyBUWHaQw\nM3JrVHPGuiS66wMsEKu51xqL1MXDxdua1trvOLpUzBydfkHUHuiO5nzDIscFByQg\nzMAd1b2/5foLbUd466tjWbiqqQKBgQDhC8jeOnncs/WwFdtkADFQ/wafPNNSJrYY\n476x4XTxVPLB9mkeVvhnXu46LgXYbHkRRm5Kx5NBku7hu/gw64anW/lSB80+4dAx\nTuWjdcRotDGEBpv6Y+gqR6rCUHhxO/63V0tob4blHF3rq8PwhUxz/92dT7k4r/Jz\nnDdGrorxyQKBgGFgOviXNnO0vA1eUmCyigjpGQ79a/UKMH4rzHu+hLZX/JOUSxrU\nfzu86JXhG45XXGc/B+ISi+9Rqizeg+Vm1BCoVHsZQPKK+RwnGwYhwG/TplbWvUAC\njO8Qyv6dumk3Ew1/5e6qqldxCvrbhZIw6LMcBvPmkHNJ8iCjzsaWve0BAoGBAIr0\njdi53pjp/V/2fvqmK81JSrt0AT+Oa42+wfZvsZd5zlL5ZTq4lLSvJwWBeVaC09ZY\n2K0PwdsRcLKtL7h1FTWtUqrV6mNTZwurHZvqkZXc/V35/sGCgs3oZoWIznWMh+CI\n5CTeCDrbYxqrela+19AgQqRpn4JjEZ9U68SW7XARAoGAGju+qSDJW8GZPXP0gyi/\nq5XFYApyw/ahk6dOnB/XmKfTW19ZFv62hKjV2Tpp0hBTacGqnX3KuLLVi9don9Qz\nwoYYRgwQuz9uOQAqdccTGF7OaKO2iliSL8jmmFls1ckMP83pSlBrmwkVt3viIWU5\nS3ezXBP8/RAYYTaazZNpC3M=\n-----END PRIVATE KEY-----\n",
+  "client_email": "crm-google-sheet@green-reporter-515415-i4.iam.gserviceaccount.com",
+  "client_id": "117103212386096358305",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/crm-google-sheet%40green-reporter-515415-i4.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}
