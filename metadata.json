@@ -1,0 +1,8 @@
+{
+  "name": "CRM – مركز الاتصال المتكامل - مصلحة الضرائب المصرية",
+  "description": "منظومة إدارة علاقات العملاء وخدمة الممولين لمركز الاتصال المتكامل بمصلحة الضرائب المصرية",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
