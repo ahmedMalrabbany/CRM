@@ -3,18 +3,33 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { initializeApp, getApps, getApp } from 'firebase/app';
-import {
-  getAuth,
-  signInWithPopup,
-  GoogleAuthProvider,
-  onAuthStateChanged,
-  type User as FirebaseUser,
-} from 'firebase/auth';
-import firebaseConfig from '../../legacy-firebase/firebase-applet-config.json';
+import oauthClientConfig from '../../firebase-applet-config.json';
 import { Case, User, Taxpayer, Caller } from '../types';
 import { collection, getDocs } from '../lib/sheetsDb';
-import { db } from '../config/firebase';
+import {
+  db,
+  TARGET_SPREADSHEET_ID,
+  TARGET_DETAILS_TAB,
+  TARGET_SPREADSHEET_URL,
+} from '../config/sheetsConfig';
+import type {
+  MappableCaseField,
+  ResolvedDetailsSchema,
+} from '../utils/sheetsDetailsMapper';
+import {
+  type GoogleWorkspaceUser,
+  computeTokenExpiryMs,
+  isAccessTokenValid,
+  formatGoogleOAuthError,
+  parseDriveAboutUser,
+} from '../utils/googleOAuthUtils';
+
+export {
+  TARGET_SPREADSHEET_ID,
+  TARGET_DETAILS_TAB,
+  TARGET_SPREADSHEET_URL,
+  type GoogleWorkspaceUser,
+};
 
 export const SCOPES = [
   'https://www.googleapis.com/auth/drive',
@@ -24,59 +39,245 @@ export const SCOPES = [
   'https://www.googleapis.com/auth/spreadsheets.readonly',
 ];
 
-const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
-const auth = getAuth(app);
-
-const provider = new GoogleAuthProvider();
-SCOPES.forEach((scope) => provider.addScope(scope));
-
-let isSigningIn = false;
-// Strictly in-memory token cache (never stored in localStorage/sessionStorage)
-let cachedAccessToken: string | null = null;
-
-export function initGoogleWorkspaceAuth(
-  onAuthSuccess?: (user: FirebaseUser, token: string) => void,
-  onAuthFailure?: () => void
-): () => void {
-  return onAuthStateChanged(auth, (user: FirebaseUser | null) => {
-    if (user && cachedAccessToken) {
-      onAuthSuccess?.(user, cachedAccessToken);
-    } else if (!isSigningIn) {
-      cachedAccessToken = null;
-      onAuthFailure?.();
-    }
-  });
+interface GisTokenResponse {
+  access_token?: string;
+  expires_in?: number | string;
+  error?: string;
+  error_description?: string;
 }
 
-export async function signInWithGoogleWorkspace(): Promise<{
-  user: FirebaseUser;
-  accessToken: string;
-}> {
-  try {
-    isSigningIn = true;
-    const result = await signInWithPopup(auth, provider);
-    const credential = GoogleAuthProvider.credentialFromResult(result);
-    if (!credential?.accessToken) {
-      throw new Error('تعذر الحصول على رمز الوصول من Google.');
+interface GisErrorResponse {
+  type?: string;
+  message?: string;
+}
+
+interface GisTokenClient {
+  requestAccessToken: (overrideConfig?: { prompt?: string }) => void;
+}
+
+interface GoogleAccountsOAuth2 {
+  initTokenClient: (config: {
+    client_id: string;
+    scope: string;
+    callback: (response: GisTokenResponse) => void;
+    error_callback?: (error: GisErrorResponse) => void;
+  }) => GisTokenClient;
+  revoke?: (token: string, done?: () => void) => void;
+}
+
+function getGoogleOAuth2Api(): GoogleAccountsOAuth2 | null {
+  const w = window as unknown as {
+    google?: { accounts?: { oauth2?: GoogleAccountsOAuth2 } };
+  };
+  return w.google?.accounts?.oauth2 || null;
+}
+
+let gsiScriptPromise: Promise<GoogleAccountsOAuth2> | null = null;
+
+function loadGoogleIdentityServices(): Promise<GoogleAccountsOAuth2> {
+  const existing = getGoogleOAuth2Api();
+  if (existing) return Promise.resolve(existing);
+
+  if (gsiScriptPromise) return gsiScriptPromise;
+
+  gsiScriptPromise = new Promise<GoogleAccountsOAuth2>((resolve, reject) => {
+    const existingScript = document.querySelector<HTMLScriptElement>(
+      'script[src^="https://accounts.google.com/gsi/client"]'
+    );
+
+    const handleReady = () => {
+      const api = getGoogleOAuth2Api();
+      if (api) {
+        resolve(api);
+      } else {
+        gsiScriptPromise = null;
+        reject(new Error(formatGoogleOAuthError('gsi_load_failed')));
+      }
+    };
+
+    const handleError = () => {
+      gsiScriptPromise = null;
+      reject(new Error(formatGoogleOAuthError('gsi_load_failed')));
+    };
+
+    if (existingScript) {
+      // Wait briefly if script tag is already in DOM and still loading
+      let checks = 0;
+      const poll = window.setInterval(() => {
+        const api = getGoogleOAuth2Api();
+        if (api) {
+          window.clearInterval(poll);
+          resolve(api);
+        } else if (++checks >= 60) {
+          window.clearInterval(poll);
+          gsiScriptPromise = null;
+          reject(new Error(formatGoogleOAuthError('gsi_load_failed')));
+        }
+      }, 100);
+      existingScript.addEventListener('error', () => {
+        window.clearInterval(poll);
+        handleError();
+      });
+      return;
     }
-    cachedAccessToken = credential.accessToken;
-    return { user: result.user, accessToken: cachedAccessToken };
-  } finally {
-    isSigningIn = false;
+
+    const script = document.createElement('script');
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.async = true;
+    script.defer = true;
+    script.onload = handleReady;
+    script.onerror = handleError;
+    document.head.appendChild(script);
+  });
+
+  return gsiScriptPromise;
+}
+
+// Strictly in-memory token & user cache (never stored in localStorage/sessionStorage)
+let cachedAccessToken: string | null = null;
+let cachedTokenExpiresAt = 0;
+let cachedUser: GoogleWorkspaceUser | null = null;
+
+type AuthListener = (user: GoogleWorkspaceUser | null, token: string | null) => void;
+const authListeners = new Set<AuthListener>();
+
+function notifyAuthListeners() {
+  const valid = isAccessTokenValid(cachedAccessToken, cachedTokenExpiresAt);
+  const token = valid ? cachedAccessToken : null;
+  const user = valid ? cachedUser : null;
+  authListeners.forEach((listener) => listener(user, token));
+}
+
+function clearInMemoryAuthSession() {
+  cachedAccessToken = null;
+  cachedTokenExpiresAt = 0;
+  cachedUser = null;
+  notifyAuthListeners();
+}
+
+export function initGoogleWorkspaceAuth(
+  onAuthSuccess?: (user: GoogleWorkspaceUser, token: string) => void,
+  onAuthFailure?: () => void
+): () => void {
+  const listener: AuthListener = (user, token) => {
+    if (user && token) {
+      onAuthSuccess?.(user, token);
+    } else {
+      onAuthFailure?.();
+    }
+  };
+  authListeners.add(listener);
+
+  // Immediately emit current in-memory auth state
+  if (isAccessTokenValid(cachedAccessToken, cachedTokenExpiresAt) && cachedAccessToken && cachedUser) {
+    onAuthSuccess?.(cachedUser, cachedAccessToken);
+  } else {
+    onAuthFailure?.();
+  }
+
+  return () => {
+    authListeners.delete(listener);
+  };
+}
+
+async function fetchDriveUserProfile(accessToken: string): Promise<GoogleWorkspaceUser> {
+  try {
+    const res = await fetch(
+      'https://www.googleapis.com/drive/v3/about?fields=user(displayName,emailAddress,photoLink)',
+      {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      }
+    );
+    if (!res.ok) {
+      return parseDriveAboutUser(null);
+    }
+    const payload = await res.json();
+    return parseDriveAboutUser(payload);
+  } catch {
+    return parseDriveAboutUser(null);
   }
 }
 
+export async function signInWithGoogleWorkspace(): Promise<{
+  user: GoogleWorkspaceUser;
+  accessToken: string;
+}> {
+  const clientId = String(oauthClientConfig?.oAuthClientId || '').trim();
+  if (!clientId) {
+    throw new Error(formatGoogleOAuthError('invalid_client'));
+  }
+
+  const oauth2 = await loadGoogleIdentityServices();
+
+  const tokenResult = await new Promise<{ accessToken: string; expiresIn?: number | string }>(
+    (resolve, reject) => {
+      let settled = false;
+      const client = oauth2.initTokenClient({
+        client_id: clientId,
+        scope: SCOPES.join(' '),
+        callback: (response: GisTokenResponse) => {
+          if (settled) return;
+          settled = true;
+          if (response?.error || !response?.access_token) {
+            reject(
+              new Error(
+                formatGoogleOAuthError(response?.error, response?.error_description)
+              )
+            );
+            return;
+          }
+          resolve({
+            accessToken: response.access_token,
+            expiresIn: response.expires_in,
+          });
+        },
+        error_callback: (err: GisErrorResponse) => {
+          if (settled) return;
+          settled = true;
+          reject(new Error(formatGoogleOAuthError(err?.type, err?.message)));
+        },
+      });
+
+      client.requestAccessToken({ prompt: 'consent' });
+    }
+  );
+
+  cachedAccessToken = tokenResult.accessToken;
+  cachedTokenExpiresAt = computeTokenExpiryMs(tokenResult.expiresIn);
+  cachedUser = await fetchDriveUserProfile(tokenResult.accessToken);
+  notifyAuthListeners();
+
+  return { user: cachedUser, accessToken: cachedAccessToken };
+}
+
 export async function signOutGoogleWorkspace(): Promise<void> {
-  cachedAccessToken = null;
-  await auth.signOut();
+  const tokenToRevoke = cachedAccessToken;
+  clearInMemoryAuthSession();
+  if (tokenToRevoke) {
+    try {
+      const oauth2 = getGoogleOAuth2Api();
+      oauth2?.revoke?.(tokenToRevoke, () => {});
+    } catch {
+      // ignore revoke failures on sign-out
+    }
+  }
 }
 
 export async function getGoogleWorkspaceAccessToken(): Promise<string | null> {
+  if (!isAccessTokenValid(cachedAccessToken, cachedTokenExpiresAt)) {
+    if (cachedAccessToken || cachedUser) {
+      clearInMemoryAuthSession();
+    }
+    return null;
+  }
   return cachedAccessToken;
 }
 
-export function getCurrentGoogleUser(): FirebaseUser | null {
-  return auth.currentUser;
+export function getCurrentGoogleUser(): GoogleWorkspaceUser | null {
+  if (!isAccessTokenValid(cachedAccessToken, cachedTokenExpiresAt)) {
+    return null;
+  }
+  return cachedUser;
 }
 
 export function extractSpreadsheetId(input: string): string {
@@ -125,7 +326,7 @@ async function googleApiFetch(url: string, init: RequestInit = {}): Promise<any>
 
   const res = await fetch(url, { ...init, headers });
   if (res.status === 401) {
-    cachedAccessToken = null;
+    clearInMemoryAuthSession();
     const err: any = new Error('انتهت صلاحية جلسة Google، يرجى إعادة تسجيل الدخول بحساب Google.');
     err.code = 'AUTH_REQUIRED';
     throw err;
@@ -142,6 +343,108 @@ async function googleApiFetch(url: string, init: RequestInit = {}): Promise<any>
     throw new Error(`Google API (${res.status}): ${detail}`);
   }
   return res.json();
+}
+
+async function backendSheetsFetch(path: string, init: RequestInit = {}): Promise<any> {
+  const token = await getGoogleWorkspaceAccessToken();
+  if (!token) {
+    const err: any = new Error('GOOGLE_AUTH_REQUIRED');
+    err.code = 'AUTH_REQUIRED';
+    throw err;
+  }
+  const headers = new Headers(init.headers || {});
+  headers.set('Authorization', `Bearer ${token}`);
+  if (init.body && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
+
+  const res = await fetch(path, { ...init, headers });
+  if (res.status === 401) {
+    clearInMemoryAuthSession();
+    const err: any = new Error('انتهت صلاحية جلسة Google، يرجى إعادة تسجيل الدخول بحساب Google.');
+    err.code = 'AUTH_REQUIRED';
+    throw err;
+  }
+  const payload = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(payload?.error || `Google Sheets Sync Error (${res.status})`);
+  }
+  return payload;
+}
+
+export interface DetailsTabInspectionResult {
+  spreadsheetId: string;
+  title: string;
+  spreadsheetUrl: string;
+  sheets: SheetTabInfo[];
+  detailsTabTitle: string;
+  hasDetailsTab: boolean;
+  headers: string[];
+  rows: any[][];
+  schema: ResolvedDetailsSchema;
+  cases: Case[];
+  rowNumbersByCaseId: Record<string, number>;
+}
+
+export interface DetailsTabSyncResult {
+  ok: boolean;
+  spreadsheetId: string;
+  spreadsheetUrl: string;
+  tabTitle: string;
+  headers: string[];
+  totalRows: number;
+  schema: ResolvedDetailsSchema;
+}
+
+export async function fetchDetailsTabFromTargetSheet(
+  spreadsheetIdInput: string = TARGET_SPREADSHEET_ID,
+  tabName: string = TARGET_DETAILS_TAB,
+  customFieldMap?: Record<string, MappableCaseField | ''>
+): Promise<DetailsTabInspectionResult> {
+  const spreadsheetId = extractSpreadsheetId(spreadsheetIdInput) || TARGET_SPREADSHEET_ID;
+  const params = new URLSearchParams({
+    spreadsheetId,
+    tabName: tabName || TARGET_DETAILS_TAB,
+  });
+  if (customFieldMap && Object.keys(customFieldMap).length > 0) {
+    params.set('customMap', JSON.stringify(customFieldMap));
+  }
+  return backendSheetsFetch(`/api/sheets/details?${params.toString()}`);
+}
+
+export async function importDetailsCasesIntoAppStore(
+  cases: Case[]
+): Promise<{ ok: boolean; importedCount: number }> {
+  const res = await fetch('/api/db/hydrate-cases', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ cases }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data?.error || 'تعذر استيراد الحالات إلى قاعدة بيانات النظام.');
+  }
+  return data;
+}
+
+export async function syncCasesToDetailsTab(params: {
+  spreadsheetId?: string;
+  tabName?: string;
+  cases: Case[];
+  includeMissingColumns?: boolean;
+  customFieldMap?: Record<string, MappableCaseField | ''>;
+}): Promise<DetailsTabSyncResult> {
+  const spreadsheetId = extractSpreadsheetId(params.spreadsheetId || '') || TARGET_SPREADSHEET_ID;
+  return backendSheetsFetch('/api/sheets/details/sync', {
+    method: 'POST',
+    body: JSON.stringify({
+      spreadsheetId,
+      tabName: params.tabName || TARGET_DETAILS_TAB,
+      cases: params.cases,
+      includeMissingColumns: Boolean(params.includeMissingColumns),
+      customFieldMap: params.customFieldMap,
+    }),
+  });
 }
 
 export async function listUserSpreadsheets(): Promise<DriveSpreadsheetItem[]> {

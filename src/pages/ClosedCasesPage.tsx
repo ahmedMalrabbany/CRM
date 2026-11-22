@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useMemo } from 'react';
-import { ArchiveX, UserCheck, FolderCheck, Search, Eye, RotateCcw } from 'lucide-react';
+import { ArchiveX, UserCheck, FolderCheck, Search, Eye, RotateCcw, AlertCircle, CheckCircle2, X } from 'lucide-react';
 import { Case, User } from '../types';
 import { isCaseOwnedByUser, reopenCase } from '../services/caseService';
 import { StatusBadge, PriorityIndicator } from '../components/SkeletonLoader';
@@ -25,6 +25,10 @@ export const ClosedCasesPage: React.FC<ClosedCasesPageProps> = ({
   const [activeTab, setActiveTab] = useState<'mine' | 'all'>('mine');
   const [searchTerm, setSearchTerm] = useState('');
   const [reopeningId, setReopeningId] = useState<string | null>(null);
+  const [reopenFeedback, setReopenFeedback] = useState<{
+    type: 'success' | 'error';
+    message: string;
+  } | null>(null);
 
   const canReopenAny =
     currentUser.role === 'management' ||
@@ -34,6 +38,7 @@ export const ClosedCasesPage: React.FC<ClosedCasesPageProps> = ({
   const handleQuickReopen = async (e: React.MouseEvent, c: Case) => {
     e.stopPropagation();
     if (!canReopenAny && !isCaseOwnedByUser(c, currentUser)) return;
+    setReopenFeedback(null);
     setReopeningId(c.id);
     try {
       await reopenCase(
@@ -43,8 +48,20 @@ export const ClosedCasesPage: React.FC<ClosedCasesPageProps> = ({
           : 'Reopened for follow-up',
         currentUser
       );
-    } catch (err) {
-      console.error('Quick reopen error:', err);
+      setReopenFeedback({
+        type: 'success',
+        message:
+          language === 'ar'
+            ? `تمت إعادة فتح الحالة ${c.caseId} بنجاح.`
+            : `Case ${c.caseId} reopened successfully.`,
+      });
+    } catch (err: any) {
+      setReopenFeedback({
+        type: 'error',
+        message:
+          err?.message ||
+          (language === 'ar' ? 'تعذر إعادة فتح الحالة.' : 'Failed to reopen case.'),
+      });
     } finally {
       setReopeningId(null);
     }
@@ -141,6 +158,32 @@ export const ClosedCasesPage: React.FC<ClosedCasesPageProps> = ({
           </div>
         </div>
       </div>
+
+      {reopenFeedback && (
+        <div
+          className={`p-3 rounded-xl border text-xs font-bold flex items-center justify-between gap-2 animate-scale-in ${
+            reopenFeedback.type === 'success'
+              ? 'bg-emerald-500/10 border-emerald-500/25 text-emerald-700 dark:text-emerald-300'
+              : 'bg-rose-500/10 border-rose-500/25 text-rose-700 dark:text-rose-300'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            {reopenFeedback.type === 'success' ? (
+              <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+            ) : (
+              <AlertCircle className="w-4 h-4 text-rose-500 shrink-0" />
+            )}
+            <span>{reopenFeedback.message}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setReopenFeedback(null)}
+            className="p-1 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 cursor-pointer"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* Closed Cases Table */}
       <div className="bg-white/95 dark:bg-[#0B1D35]/95 backdrop-blur-md rounded-2xl border border-slate-200 dark:border-[#00386B] shadow-saas overflow-hidden">

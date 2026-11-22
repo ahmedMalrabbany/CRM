@@ -28,6 +28,7 @@ import { isCaseOwnedByUser, isCaseOverdue72Hours } from '../services/caseService
 import { useThemeLanguage } from '../context/ThemeLanguageContext';
 import { GoogleSheetsSyncModal } from '../components/GoogleSheetsSyncModal';
 import { buildReportSheetTabs } from '../services/googleWorkspaceService';
+import { buildDailySparklineSeries, computeTrendDelta } from '../utils/analyticsUtils';
 
 interface ReportsPageProps {
   cases: Case[];
@@ -313,6 +314,27 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
   const closed = filteredCases.filter((c) => c.status === 'مغلقة').length;
   const rate = total > 0 ? Math.round((closed / total) * 100) : 0;
 
+  const centerSparklines = useMemo(() => buildDailySparklineSeries(cases, 7), [cases]);
+  const personalSparklines = useMemo(() => {
+    if (!currentUser) return null;
+    const myCases = cases.filter(
+      (c) =>
+        isCaseOwnedByUser(c, currentUser) ||
+        c.createdById === currentUser.id ||
+        c.createdByCrmUser === currentUser.crmUser
+    );
+    return buildDailySparklineSeries(myCases, 7);
+  }, [cases, currentUser]);
+
+  const centerTrends = useMemo(() => {
+    const windowDays =
+      dateFilter === 'today' ? 1 : dateFilter === 'month' ? 30 : dateFilter === 'year' ? 365 : 7;
+    return {
+      total: computeTrendDelta(cases, () => true, windowDays),
+      closed: computeTrendDelta(cases, (c) => c.status === 'مغلقة', windowDays),
+    };
+  }, [cases, dateFilter]);
+
   const periodLabel =
     dateFilter === 'today'
       ? 'اليوم'
@@ -549,7 +571,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
                   </div>
                 </div>
                 <Sparkline
-                  data={[1, 2, 2, 4, 3, 5, Math.max(personalPerformance.registeredCount, 2)]}
+                  data={personalSparklines?.total || [0, 0, 0, 0, 0, 0, personalPerformance.registeredCount]}
                   color="#004B87"
                   id="my-reg"
                 />
@@ -571,7 +593,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
                   </span>
                 </div>
                 <Sparkline
-                  data={[1, 2, 1, 3, 2, 2, Math.max(personalPerformance.openOwnedCount, 1)]}
+                  data={personalSparklines?.open || [0, 0, 0, 0, 0, 0, personalPerformance.openOwnedCount]}
                   color="#d97706"
                   id="my-open"
                 />
@@ -588,7 +610,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
                   </div>
                 </div>
                 <Sparkline
-                  data={[1, 2, 3, 3, 4, 5, Math.max(personalPerformance.closedCount, 2)]}
+                  data={personalSparklines?.closed || [0, 0, 0, 0, 0, 0, personalPerformance.closedCount]}
                   color="#00A651"
                   id="my-closed"
                 />
@@ -654,11 +676,11 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
               </span>
               <span className="inline-flex items-center gap-0.5 text-[11px] font-mono font-bold text-[#00A651] dark:text-[#00E676] tabular-nums">
                 <TrendingUp className="w-3 h-3" />
-                +14.2%
+                {centerTrends.total.label}
               </span>
             </div>
           </div>
-          <Sparkline data={[3, 6, 5, 8, 9, 11, Math.max(total, 10)]} color="#004B87" id="rep-total" />
+          <Sparkline data={centerSparklines.total} color="#004B87" id="rep-total" />
         </div>
 
         <div className="bg-white/95 dark:bg-[#0B1D35]/95 backdrop-blur-md p-5 rounded-2xl border border-slate-200 dark:border-[#00386B] shadow-saas flex items-end justify-between hover:-translate-y-0.5 transition-all">
@@ -672,11 +694,11 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
               </span>
               <span className="inline-flex items-center gap-0.5 text-[11px] font-mono font-bold text-[#00A651] dark:text-[#00E676] tabular-nums">
                 <TrendingUp className="w-3 h-3" />
-                +19.5%
+                {centerTrends.closed.label}
               </span>
             </div>
           </div>
-          <Sparkline data={[2, 4, 4, 7, 8, 9, Math.max(closed, 8)]} color="#00A651" id="rep-closed" />
+          <Sparkline data={centerSparklines.closed} color="#00A651" id="rep-closed" />
         </div>
 
         <div className="bg-white/95 dark:bg-[#0B1D35]/95 backdrop-blur-md p-5 rounded-2xl border border-slate-200 dark:border-[#00386B] shadow-saas flex items-end justify-between hover:-translate-y-0.5 transition-all">
@@ -690,11 +712,11 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
               </span>
               <span className="inline-flex items-center gap-0.5 text-[11px] font-mono font-bold text-[#004B87] dark:text-sky-300 tabular-nums">
                 <TrendingUp className="w-3 h-3" />
-                +6.8%
+                {closed}/{total}
               </span>
             </div>
           </div>
-          <Sparkline data={[60, 68, 72, 75, 80, 84, Math.max(rate, 78)]} color="#0284c7" id="rep-rate" />
+          <Sparkline data={centerSparklines.completionRate} color="#0284c7" id="rep-rate" />
         </div>
       </div>
 

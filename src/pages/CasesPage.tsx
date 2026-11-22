@@ -20,7 +20,11 @@ import {
   CheckSquare,
   X,
   FileSpreadsheet,
+  AlertCircle,
+  CheckCircle2,
+  AlertTriangle,
 } from 'lucide-react';
+import { createPortal } from 'react-dom';
 import { GoogleSheetsSyncModal } from '../components/GoogleSheetsSyncModal';
 import { buildReportSheetTabs } from '../services/googleWorkspaceService';
 import { Case, User } from '../types';
@@ -47,6 +51,7 @@ import {
   CaseFilterCriteria,
   filterCasesByCriteria,
 } from '../utils/caseFilterUtils';
+import { paginateItems } from '../utils/paginationUtils';
 
 export interface CasesFilterPreset extends CaseFilterCriteria {
   key: number;
@@ -98,6 +103,12 @@ export const CasesPage: React.FC<CasesPageProps> = ({
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isBulkClaiming, setIsBulkClaiming] = useState(false);
   const [bulkMessage, setBulkMessage] = useState<string | null>(null);
+  const [actionFeedback, setActionFeedback] = useState<{
+    type: 'success' | 'error';
+    message: string;
+  } | null>(null);
+  const [pendingDeleteCase, setPendingDeleteCase] = useState<Case | null>(null);
+  const [isDeletingCase, setIsDeletingCase] = useState(false);
   const [isGoogleSheetsOpen, setIsGoogleSheetsOpen] = useState(false);
 
   const serviceTypeOptions = useMemo(() => {
@@ -177,12 +188,20 @@ export const CasesPage: React.FC<CasesPageProps> = ({
     sortOrder,
   ]);
 
-  // Paginated records
-  const totalPages = Math.ceil(filteredCases.length / pageSize) || 1;
-  const paginatedCases = useMemo(() => {
-    const start = (currentPage - 1) * pageSize;
-    return filteredCases.slice(start, start + pageSize);
-  }, [filteredCases, currentPage, pageSize]);
+  // Paginated records (automatically clamps page when filtered list shrinks)
+  const pagination = useMemo(
+    () => paginateItems(filteredCases, currentPage, pageSize),
+    [filteredCases, currentPage, pageSize]
+  );
+  const totalPages = pagination.totalPages;
+  const effectivePage = pagination.currentPage;
+  const paginatedCases = pagination.items;
+
+  useEffect(() => {
+    if (effectivePage !== currentPage) {
+      setCurrentPage(effectivePage);
+    }
+  }, [effectivePage, currentPage]);
 
   const resetFilters = () => {
     setSearchTerm('');
@@ -208,20 +227,62 @@ export const CasesPage: React.FC<CasesPageProps> = ({
     currentUser.role === 'technical_support' ||
     currentUser.role === 'super_admin';
 
-  const handleDelete = async (e: React.MouseEvent, caseDocId: string) => {
+  const handleRequestDelete = (e: React.MouseEvent, c: Case) => {
     e.stopPropagation();
     if (!isSuperAdmin) return;
-    await deleteCase(caseDocId, false, currentUser);
+    setActionFeedback(null);
+    setPendingDeleteCase(c);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!isSuperAdmin || !pendingDeleteCase || isDeletingCase) return;
+    setIsDeletingCase(true);
+    setActionFeedback(null);
+    try {
+      await deleteCase(pendingDeleteCase.id, false, currentUser);
+      setSelectedIds((prev) => prev.filter((id) => id !== pendingDeleteCase.id));
+      setActionFeedback({
+        type: 'success',
+        message:
+          language === 'ar'
+            ? `تم أرشفة/حذف الحالة ${pendingDeleteCase.caseId} بنجاح.`
+            : `Case ${pendingDeleteCase.caseId} archived successfully.`,
+      });
+      setPendingDeleteCase(null);
+    } catch (err: any) {
+      setActionFeedback({
+        type: 'error',
+        message:
+          err?.message ||
+          (language === 'ar' ? 'تعذر أرشفة الحالة.' : 'Failed to archive case.'),
+      });
+      setPendingDeleteCase(null);
+    } finally {
+      setIsDeletingCase(false);
+    }
   };
 
   const handleQuickClaim = async (e: React.MouseEvent, c: Case) => {
     e.stopPropagation();
+    setActionFeedback(null);
     try {
       setClaimingId(c.id);
       await claimCase(c.id, currentUser);
       setSelectedIds((prev) => prev.filter((id) => id !== c.id));
-    } catch (err) {
-      console.error(err);
+      setActionFeedback({
+        type: 'success',
+        message:
+          language === 'ar'
+            ? `تم سحب الحالة ${c.caseId} إلى حسابك بنجاح.`
+            : `Claimed case ${c.caseId} successfully.`,
+      });
+    } catch (err: any) {
+      setActionFeedback({
+        type: 'error',
+        message:
+          err?.message ||
+          (language === 'ar' ? 'فشل سحب الحالة.' : 'Failed to claim case.'),
+      });
     } finally {
       setClaimingId(null);
     }
@@ -272,8 +333,13 @@ export const CasesPage: React.FC<CasesPageProps> = ({
           : `Successfully claimed ${claimedCount} case(s) to your account.`
       );
       setTimeout(() => setBulkMessage(null), 5000);
-    } catch (err) {
-      console.error('Bulk claim failed:', err);
+    } catch (err: any) {
+      setActionFeedback({
+        type: 'error',
+        message:
+          err?.message ||
+          (language === 'ar' ? 'تعذر تنفيذ السحب الجماعي للحالات.' : 'Bulk claim failed.'),
+      });
     } finally {
       setIsBulkClaiming(false);
     }
@@ -498,7 +564,10 @@ export const CasesPage: React.FC<CasesPageProps> = ({
               </span>
               <select
                 value={priorityFilter}
-                onChange={(e) => setPriorityFilter(e.target.value)}
+                onChange={(e) => {
+                  setPriorityFilter(e.target.value);
+                  setCurrentPage(1);
+                }}
                 className="p-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-800 dark:text-white"
               >
                 <option value="all">{language === 'ar' ? 'الكل' : 'All'}</option>
@@ -515,7 +584,10 @@ export const CasesPage: React.FC<CasesPageProps> = ({
               </span>
               <select
                 value={dateFilter}
-                onChange={(e) => setDateFilter(e.target.value as any)}
+                onChange={(e) => {
+                  setDateFilter(e.target.value as any);
+                  setCurrentPage(1);
+                }}
                 className="p-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-800 dark:text-white"
               >
                 <option value="all">{language === 'ar' ? 'كافة التواريخ' : 'All Dates'}</option>
@@ -532,7 +604,10 @@ export const CasesPage: React.FC<CasesPageProps> = ({
               </span>
               <button
                 type="button"
-                onClick={() => setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc')}
+                onClick={() => {
+                  setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc');
+                  setCurrentPage(1);
+                }}
                 className="py-1 px-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg text-slate-700 dark:text-slate-200 font-bold border border-slate-200 dark:border-slate-700 transition-colors"
               >
                 {sortOrder === 'desc'
@@ -555,6 +630,34 @@ export const CasesPage: React.FC<CasesPageProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Action Feedback Banner (Claim / Archive / Error) */}
+      {actionFeedback && (
+        <div
+          className={`p-3 rounded-xl border text-xs font-bold flex items-center justify-between gap-2 animate-scale-in ${
+            actionFeedback.type === 'success'
+              ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-300'
+              : 'bg-rose-500/10 border-rose-500/30 text-rose-700 dark:text-rose-300'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            {actionFeedback.type === 'success' ? (
+              <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+            ) : (
+              <AlertCircle className="w-4 h-4 text-rose-500 shrink-0" />
+            )}
+            <span>{actionFeedback.message}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setActionFeedback(null)}
+            className="p-1 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 cursor-pointer"
+            aria-label={language === 'ar' ? 'إغلاق' : 'Dismiss'}
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* Main Content: Either Kanban Pipeline Board OR Smart Data Table */}
       {viewMode === 'kanban' ? (
@@ -782,8 +885,8 @@ export const CasesPage: React.FC<CasesPageProps> = ({
                             {isSuperAdmin && (
                               <button
                                 type="button"
-                                onClick={(e) => handleDelete(e, c.id)}
-                                className="p-1.5 hover:bg-rose-500/15 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 rounded-lg transition-colors"
+                                onClick={(e) => handleRequestDelete(e, c)}
+                                className="p-1.5 hover:bg-rose-500/15 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 rounded-lg transition-colors cursor-pointer"
                                 title={
                                   language === 'ar' ? 'أرشفة / حذف الحالة' : 'Archive / Delete Case'
                                 }
@@ -816,7 +919,7 @@ export const CasesPage: React.FC<CasesPageProps> = ({
             <div className="text-slate-500 dark:text-slate-400">
               {language === 'ar' ? 'عرض الصفحة' : 'Page'}{' '}
               <span className="font-bold text-slate-900 dark:text-white font-mono tabular-nums">
-                {currentPage}
+                {effectivePage}
               </span>{' '}
               {language === 'ar' ? 'من' : 'of'}{' '}
               <span className="font-bold text-slate-900 dark:text-white font-mono tabular-nums">
@@ -845,15 +948,15 @@ export const CasesPage: React.FC<CasesPageProps> = ({
               </select>
 
               <button
-                onClick={() => handlePageChange(Math.max(1, currentPage - 1))}
-                disabled={currentPage <= 1}
+                onClick={() => handlePageChange(Math.max(1, effectivePage - 1))}
+                disabled={effectivePage <= 1}
                 className="p-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
                 <PrevChevron className="w-4 h-4" />
               </button>
               <button
-                onClick={() => handlePageChange(Math.min(totalPages, currentPage + 1))}
-                disabled={currentPage >= totalPages}
+                onClick={() => handlePageChange(Math.min(totalPages, effectivePage + 1))}
+                disabled={effectivePage >= totalPages}
                 className="p-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
                 <NextChevron className="w-4 h-4" />
@@ -875,6 +978,74 @@ export const CasesPage: React.FC<CasesPageProps> = ({
         defaultNewSheetName={`ETA_CRM_Cases_${new Date().toISOString().slice(0, 10)}`}
         prepareTabsToWrite={() => buildReportSheetTabs(filteredCases)}
       />
+
+      {pendingDeleteCase &&
+        createPortal(
+          <div
+            dir={isRtl ? 'rtl' : 'ltr'}
+            onClick={() => !isDeletingCase && setPendingDeleteCase(null)}
+            className="fixed inset-0 z-[95] flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4"
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white dark:bg-[#0B1D35] rounded-2xl shadow-2xl border-2 border-rose-500 w-full max-w-md overflow-hidden animate-scale-in text-start"
+            >
+              <div className="bg-[#00264D] px-5 py-4 text-white flex items-center gap-3 border-b border-[#004B87]">
+                <div className="p-2 rounded-xl bg-rose-600 text-white shrink-0">
+                  <AlertTriangle className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="font-black text-sm">
+                    {language === 'ar' ? 'تأكيد أرشفة / حذف الحالة' : 'Confirm Case Archive'}
+                  </h2>
+                  <p className="text-[11px] text-sky-200 font-mono">
+                    {pendingDeleteCase.caseId}
+                  </p>
+                </div>
+              </div>
+
+              <div className="p-5 text-xs text-slate-700 dark:text-slate-200 space-y-2 leading-relaxed">
+                <p>
+                  {language === 'ar'
+                    ? 'هل أنت متأكد من أرشفة هذه الحالة وإزالتها من السجل النشط؟'
+                    : 'Are you sure you want to archive this case from the active registry?'}
+                </p>
+                <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-[#071629] border border-slate-200 dark:border-[#00386B] font-bold text-slate-900 dark:text-white">
+                  {pendingDeleteCase.title}
+                </div>
+              </div>
+
+              <div className="px-5 py-3 bg-slate-50 dark:bg-[#071629] border-t border-slate-200 dark:border-[#00386B] flex justify-end gap-2">
+                <button
+                  type="button"
+                  disabled={isDeletingCase}
+                  onClick={() => setPendingDeleteCase(null)}
+                  className="px-4 py-2 rounded-xl border border-slate-300 dark:border-[#004B87] text-slate-700 dark:text-slate-200 text-xs font-bold hover:bg-slate-100 dark:hover:bg-[#002B54] cursor-pointer"
+                >
+                  {language === 'ar' ? 'إلغاء' : 'Cancel'}
+                </button>
+                <button
+                  type="button"
+                  disabled={isDeletingCase}
+                  onClick={handleConfirmDelete}
+                  className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-black flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>
+                    {isDeletingCase
+                      ? language === 'ar'
+                        ? 'جارٍ الأرشفة...'
+                        : 'Archiving...'
+                      : language === 'ar'
+                      ? 'تأكيد الأرشفة'
+                      : 'Confirm Archive'}
+                  </span>
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
     </div>
   );
 };

@@ -34,7 +34,7 @@ import {
   normalizeCrmCode,
   normalizeUserRole,
   deduplicateUsers,
-  cleanupDuplicateUsersInFirestore,
+  cleanupDuplicateUsers,
 } from '../services/userService';
 import { useThemeLanguage } from '../context/ThemeLanguageContext';
 
@@ -309,10 +309,10 @@ export const UsersManagementPage: React.FC<UsersManagementPageProps> = ({
     }
   };
 
-  // Cleanup any duplicate records in Firestore manually if triggered
+  // Cleanup any duplicate records in database manually if triggered
   const handleCleanupDuplicates = async () => {
     try {
-      const removedCount = await cleanupDuplicateUsersInFirestore();
+      const removedCount = await cleanupDuplicateUsers();
       onRefreshUsers();
       setActionMessage(
         removedCount > 0
@@ -470,15 +470,25 @@ export const UsersManagementPage: React.FC<UsersManagementPageProps> = ({
 
       {/* CSV Import Report Box */}
       {importStatus && (
-        <div className={`p-4 rounded-2xl border text-xs ${importStatus.success ? 'bg-emerald-50 border-emerald-300 text-emerald-950' : 'bg-rose-50 border-rose-300 text-rose-950'}`}>
+        <div
+          className={`p-4 rounded-2xl border text-xs ${
+            importStatus.success
+              ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-700 text-emerald-950 dark:text-emerald-100'
+              : 'bg-rose-50 dark:bg-rose-950/40 border-rose-300 dark:border-rose-700 text-rose-950 dark:text-rose-100'
+          }`}
+        >
           <div className="font-bold flex items-center gap-2 mb-1">
-            {importStatus.success ? <CheckCircle className="w-4 h-4 text-emerald-600" /> : <AlertCircle className="w-4 h-4 text-rose-600" />}
+            {importStatus.success ? (
+              <CheckCircle className="w-4 h-4 text-emerald-600 dark:text-[#00E676]" />
+            ) : (
+              <AlertCircle className="w-4 h-4 text-rose-600 dark:text-rose-400" />
+            )}
             <span>تقرير استيراد ملف المستخدمين:</span>
           </div>
           <div>تم استيراد وحفظ: <span className="font-mono font-bold">{importStatus.imported || 0}</span> مستخدم جديد</div>
           <div>تم تخطي (مسجل مسبقاً / مكرر): <span className="font-mono font-bold">{importStatus.skipped || 0}</span> مستخدم</div>
           {importStatus.errors && importStatus.errors.length > 0 && (
-            <div className="mt-2 text-rose-700">
+            <div className="mt-2 text-rose-700 dark:text-rose-300">
               <span className="font-bold">أخطاء التنسيق:</span>
               <ul className="list-disc list-inside text-[11px] mt-1">
                 {importStatus.errors.map((e, idx) => (

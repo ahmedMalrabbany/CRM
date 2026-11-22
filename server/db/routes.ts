@@ -6,6 +6,8 @@ import { Store, DbError, type Driver, type WriteOp } from './store.ts';
 import { FileDriver } from './fileDriver.ts';
 import { SheetsDriver } from './sheetsDriver.ts';
 
+export const DEFAULT_GOOGLE_SHEET_ID = '1HsxOPbasrVx1sWY7GSfkXy1IxLZp0xKPsLYS7yFDQoU';
+
 function extractSheetId(raw?: string): string {
   const trimmed = (raw || '').trim();
   if (!trimmed) return '';
@@ -118,16 +120,12 @@ function resolveServiceAccountCredentials(dataDir: string): { email?: string; ke
 }
 
 export function createDriverFromEnv(dataDir: string): Driver {
-  const sheetId = extractSheetId(process.env.GOOGLE_SHEET_ID);
-  if (sheetId) {
-    const { email, key } = resolveServiceAccountCredentials(dataDir);
-    if (email && key) {
-      return new SheetsDriver({ spreadsheetId: sheetId, clientEmail: email, privateKey: key });
-    }
-    console.warn('[db] GOOGLE_SHEET_ID is set but service-account credentials are missing -> falling back to local file storage (data/db.json).');
-  } else {
-    console.warn('[db] GOOGLE_SHEET_ID not set -> using local file storage (data/db.json). NOT for production.');
+  const sheetId = extractSheetId(process.env.GOOGLE_SHEET_ID) || DEFAULT_GOOGLE_SHEET_ID;
+  const { email, key } = resolveServiceAccountCredentials(dataDir);
+  if (sheetId && email && key) {
+    return new SheetsDriver({ spreadsheetId: sheetId, clientEmail: email, privateKey: key });
   }
+  console.warn('[db] Service-account credentials not configured -> using local file storage (data/db.json) alongside client OAuth Google Sheets sync.');
   fs.mkdirSync(dataDir, { recursive: true });
   return new FileDriver(path.join(dataDir, 'db.json'));
 }
@@ -190,6 +188,69 @@ export function createDbRouter(store: Store): Router {
       lastFlushError: store.lastFlushError,
       counts: store.stats(),
     });
+  });
+
+  // Hydrate CRM cases loaded from the Google Sheets Details tab into the active store
+  r.post('/hydrate-cases', (req: Request, res: Response) => {
+    try {
+      const { cases } = (req.body || {}) as { cases?: Array<Record<string, any>> };
+      if (!Array.isArray(cases)) {
+        throw new DbError('invalid', 'cases array is required');
+      }
+      if (cases.length > 5000) {
+        throw new DbError('invalid', 'Too many cases in one hydrate request');
+      }
+
+      const writes: WriteOp[] = [];
+      let maxCaseNumber = 0;
+
+      for (const item of cases) {
+        if (!item || typeof item !== 'object') continue;
+        const id = String(item.id || item.caseId || '').trim();
+        if (!id || id.includes('/')) continue;
+        const caseIdStr = String(item.caseId || id).trim();
+        const numMatch = /(\d+)$/.exec(caseIdStr);
+        if (numMatch) {
+          const parsedNum = Number(numMatch[1]);
+          if (Number.isFinite(parsedNum) && parsedNum > maxCaseNumber) {
+            maxCaseNumber = parsedNum;
+          }
+        }
+        const { id: _ignoredId, ...payload } = item;
+        writes.push({
+          op: 'set',
+          path: `cases/${id}`,
+          data: { ...payload, caseId: caseIdStr },
+          merge: false,
+        });
+      }
+
+      const existingCounter = store.getDoc('counters/cases');
+      const currentCounterVal = Number(existingCounter?.data?.currentValue || 0);
+      if (maxCaseNumber > currentCounterVal) {
+        writes.push({
+          op: 'set',
+          path: 'counters/cases',
+          data: {
+            currentValue: maxCaseNumber,
+            lastUpdated: new Date().toISOString(),
+          },
+          merge: false,
+        });
+      }
+
+      if (writes.length > 0) {
+        store.commit(writes);
+      }
+
+      res.json({
+        ok: true,
+        importedCount: writes.filter((w) => w.path.startsWith('cases/')).length,
+        counts: store.stats(),
+      });
+    } catch (e) {
+      fail(res, e);
+    }
   });
 
   // Re-read the sheet after manual edits. Protected by DB_ADMIN_TOKEN.

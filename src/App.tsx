@@ -40,6 +40,8 @@ import { NewCaseModal } from './components/NewCaseModal';
 import { CaseDetailModal } from './components/CaseDetailModal';
 import { SmartSearchModal } from './components/SmartSearchModal';
 import { SendNotificationModal } from './components/SendNotificationModal';
+import { GoogleSheetsSyncModal } from './components/GoogleSheetsSyncModal';
+import { TARGET_SPREADSHEET_ID, TARGET_DETAILS_TAB } from './utils/sheetsDetailsMapper';
 import { SmartSearchParams } from './services/geminiService';
 import { Footer } from './components/Footer';
 import { MobileBottomNav } from './components/MobileBottomNav';
@@ -69,6 +71,7 @@ const MainApp: React.FC = () => {
   const [selectedCase, setSelectedCase] = useState<Case | null>(null);
   const [isSmartSearchOpen, setIsSmartSearchOpen] = useState(false);
   const [isSendNotifOpen, setIsSendNotifOpen] = useState(false);
+  const [isSheetsSyncOpen, setIsSheetsSyncOpen] = useState(false);
   const [casesFilterStatus, setCasesFilterStatus] = useState<string>('all');
   const [casesFilterPreset, setCasesFilterPreset] = useState<CasesFilterPreset | null>(null);
   const [backupSchedule, setBackupSchedule] = useState<BackupScheduleConfig | null>(null);
@@ -87,6 +90,7 @@ const MainApp: React.FC = () => {
   const navHistoryRef = useRef<NavPage[]>([]);
   const modalStateRef = useRef({
     isExitConfirmOpen: false,
+    isSheetsSyncOpen: false,
     isSendNotifOpen: false,
     isSmartSearchOpen: false,
     hasSelectedCase: false,
@@ -97,6 +101,7 @@ const MainApp: React.FC = () => {
   useEffect(() => {
     modalStateRef.current = {
       isExitConfirmOpen,
+      isSheetsSyncOpen,
       isSendNotifOpen,
       isSmartSearchOpen,
       hasSelectedCase: !!selectedCase,
@@ -105,6 +110,7 @@ const MainApp: React.FC = () => {
     };
   }, [
     isExitConfirmOpen,
+    isSheetsSyncOpen,
     isSendNotifOpen,
     isSmartSearchOpen,
     selectedCase,
@@ -271,6 +277,10 @@ const MainApp: React.FC = () => {
 
       if (m.isExitConfirmOpen) {
         setIsExitConfirmOpen(false);
+        return;
+      }
+      if (m.isSheetsSyncOpen) {
+        setIsSheetsSyncOpen(false);
         return;
       }
       if (m.isSendNotifOpen) {
@@ -469,6 +479,7 @@ const MainApp: React.FC = () => {
         onOpenNewCase={() => setIsNewCaseOpen(true)}
         onOpenSmartSearch={() => setIsSmartSearchOpen(true)}
         onOpenSendNotification={() => setIsSendNotifOpen(true)}
+        onOpenSheetsSync={() => setIsSheetsSyncOpen(true)}
         unreadIncomingCount={incomingCasesCount}
         onToggleMobileMenu={() => setIsMobileMenuOpen((prev) => !prev)}
         onRequestLogout={() => requestExitConfirm('logout')}
@@ -615,7 +626,10 @@ const MainApp: React.FC = () => {
                 currentUser.role === 'technical_support') && <AuditLogPage />}
 
             {currentPage === 'settings' && currentUser.role === 'super_admin' && (
-              <SystemSettingsPage />
+              <SystemSettingsPage
+                currentUser={currentUser}
+                onOpenSheetsSync={() => setIsSheetsSyncOpen(true)}
+              />
             )}
 
             {currentPage === 'guide' && currentUser.role === 'super_admin' && (
@@ -677,6 +691,26 @@ const MainApp: React.FC = () => {
         onClose={() => setIsSendNotifOpen(false)}
         currentUser={currentUser}
         allUsers={allUsers}
+      />
+
+      {/* Google Sheets Details Tab Sync Modal */}
+      <GoogleSheetsSyncModal
+        isOpen={isSheetsSyncOpen}
+        onClose={() => setIsSheetsSyncOpen(false)}
+        title={
+          language === 'ar'
+            ? `ربط ومزامنة Google Sheets — ورقة ${TARGET_DETAILS_TAB}`
+            : `Google Sheets Sync — ${TARGET_DETAILS_TAB} Tab`
+        }
+        subtitle={
+          language === 'ar'
+            ? `استيراد ومزامنة حقول الحالات مع ورقة ${TARGET_DETAILS_TAB} في جدول البيانات المعتمد (${TARGET_SPREADSHEET_ID})`
+            : `Map, import, and sync CRM case fields with the ${TARGET_DETAILS_TAB} tab (${TARGET_SPREADSHEET_ID})`
+        }
+        defaultNewSheetName="CRM_Details_Sync"
+        mode="details"
+        cases={cases}
+        defaultSpreadsheetId={TARGET_SPREADSHEET_ID}
       />
 
       {/* Automatic Scheduled Backup Confirmation Toast (Super Admin) */}

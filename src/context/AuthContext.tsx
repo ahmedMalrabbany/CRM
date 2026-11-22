@@ -8,6 +8,11 @@ import { User } from '../types';
 import { loginWithCredentials } from '../services/authService';
 import { logAuditEvent } from '../services/auditService';
 import { initializeUsersDatabase, updateUserPresence } from '../services/userService';
+import {
+  DEFAULT_SYSTEM_SETTINGS,
+  fetchSystemSettings,
+  subscribeToSystemSettings,
+} from '../services/systemSettingsService';
 
 interface AuthContextType {
   currentUser: User | null;
@@ -15,6 +20,7 @@ interface AuthContextType {
   isVerifiedInScreen: boolean;
   isLoading: boolean;
   sessionTimeoutMinutes: number;
+  systemHotline: string;
   login: (
     username: string,
     password: string,
@@ -28,14 +34,28 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const AUTH_STORAGE_KEY = 'eta_crm_active_session';
-const DEFAULT_TIMEOUT_MINS = 30;
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isVerifiedInScreen, setIsVerifiedInScreen] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [sessionTimeoutMinutes] = useState<number>(DEFAULT_TIMEOUT_MINS);
+  const [sessionTimeoutMinutes, setSessionTimeoutMinutes] = useState<number>(
+    DEFAULT_SYSTEM_SETTINGS.sessionTimeoutMinutes
+  );
+  const [systemHotline, setSystemHotline] = useState<string>(DEFAULT_SYSTEM_SETTINGS.hotline);
   const logoutRef = useRef<(reason?: 'manual' | 'timeout') => Promise<void>>(async () => {});
+
+  useEffect(() => {
+    const unsub = subscribeToSystemSettings((cfg) => {
+      setSessionTimeoutMinutes(cfg.sessionTimeoutMinutes);
+      setSystemHotline(cfg.hotline);
+    });
+    fetchSystemSettings().then((cfg) => {
+      setSessionTimeoutMinutes(cfg.sessionTimeoutMinutes);
+      setSystemHotline(cfg.hotline);
+    });
+    return () => unsub();
+  }, []);
 
   // Initialize DB with CSV users on first boot
   useEffect(() => {
@@ -197,6 +217,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isVerifiedInScreen,
         isLoading,
         sessionTimeoutMinutes,
+        systemHotline,
         login,
         confirmIdentity,
         logout,

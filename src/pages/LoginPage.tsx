@@ -32,7 +32,7 @@ import { PWAInstallButton } from '../components/PWAInstallPrompt';
 export type LoginSection = 'agents' | 'management_tech' | 'admin';
 
 export const LoginPage: React.FC = () => {
-  const { login, currentUser, isVerifiedInScreen, confirmIdentity, logout } = useAuth();
+  const { login, currentUser, isVerifiedInScreen, confirmIdentity, logout, systemHotline } = useAuth();
   const { isDark, language, isRtl, toggleTheme, toggleLanguage, t } = useThemeLanguage();
   const [activeSection, setActiveSection] = useState<LoginSection>('agents');
   const [username, setUsername] = useState('');
@@ -111,7 +111,7 @@ export const LoginPage: React.FC = () => {
     }
   };
 
-  // If user is already authenticated in Firebase but awaiting session screen confirmation
+  // If user is already authenticated in the CRM session but awaiting identity confirmation screen
   if (currentUser && !isVerifiedInScreen) {
     return (
       <div
@@ -302,7 +302,7 @@ export const LoginPage: React.FC = () => {
       {/* Top Utility Controls (Theme & Language) */}
       <div className="relative z-10 max-w-lg mx-auto w-full flex items-center justify-between gap-2 pt-2 px-1">
         <div className="flex items-center gap-1.5 text-xs text-sky-200/90 font-bold">
-          <span>{t('hotline')}: <strong className="font-mono text-white tabular-nums">16395</strong></span>
+          <span>{t('hotline')}: <strong className="font-mono text-white tabular-nums">{systemHotline}</strong></span>
         </div>
         <div className="flex items-center gap-2">
           <PWAInstallButton variant="login" />

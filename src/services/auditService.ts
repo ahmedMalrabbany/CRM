@@ -4,7 +4,7 @@
  */
 
 import { collection, addDoc, getDocs, query, orderBy, limit, onSnapshot } from '../lib/sheetsDb';
-import { db, handleFirestoreError, OperationType } from '../config/firebase';
+import { db, handleDatabaseError, OperationType } from '../config/sheetsConfig';
 import { AuditLogItem, UserRole } from '../types';
 
 const AUDIT_COLLECTION = 'auditLogs';
@@ -58,7 +58,7 @@ export function subscribeToAuditLogs(
       callback(logs);
     },
     (error) => {
-      handleFirestoreError(error, OperationType.LIST, AUDIT_COLLECTION);
+      handleDatabaseError(error, OperationType.LIST, AUDIT_COLLECTION);
     }
   );
 }
@@ -77,6 +77,6 @@ export async function fetchAuditLogs(maxItems = 200): Promise<AuditLogItem[]> {
     });
     return logs;
   } catch (error) {
-    handleFirestoreError(error, OperationType.LIST, AUDIT_COLLECTION);
+    handleDatabaseError(error, OperationType.LIST, AUDIT_COLLECTION);
   }
 }

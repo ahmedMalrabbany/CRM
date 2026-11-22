@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import {
   X,
@@ -15,10 +15,11 @@ import {
   AlertTriangle,
   Eye,
   UploadCloud,
+  DownloadCloud,
   LogOut,
   Search,
+  ArrowLeftRight,
 } from 'lucide-react';
-import type { User as FirebaseUser } from 'firebase/auth';
 import {
   initGoogleWorkspaceAuth,
   signInWithGoogleWorkspace,
@@ -30,10 +31,24 @@ import {
   readSheetPreview,
   createGoogleSpreadsheet,
   writeTabsToSpreadsheet,
+  fetchDetailsTabFromTargetSheet,
+  importDetailsCasesIntoAppStore,
+  syncCasesToDetailsTab,
   DriveSpreadsheetItem,
   SpreadsheetMetadata,
   SheetWriteTab,
+  DetailsTabInspectionResult,
+  GoogleWorkspaceUser,
+  TARGET_SPREADSHEET_ID,
+  TARGET_DETAILS_TAB,
+  TARGET_SPREADSHEET_URL,
 } from '../services/googleWorkspaceService';
+import {
+  DETAILS_COLUMN_DEFINITIONS,
+  MappableCaseField,
+  computeDetailsSyncDiff,
+} from '../utils/sheetsDetailsMapper';
+import { Case } from '../types';
 import { useThemeLanguage } from '../context/ThemeLanguageContext';
 
 interface GoogleSheetsSyncModalProps {
@@ -42,7 +57,11 @@ interface GoogleSheetsSyncModalProps {
   title: string;
   subtitle?: string;
   defaultNewSheetName: string;
-  prepareTabsToWrite: () => Promise<SheetWriteTab[]> | SheetWriteTab[];
+  mode?: 'details' | 'export';
+  cases?: Case[];
+  defaultSpreadsheetId?: string;
+  prepareTabsToWrite?: () => Promise<SheetWriteTab[]> | SheetWriteTab[];
+  onDetailsImported?: (importedCount: number) => void;
 }
 
 export const GoogleSheetsSyncModal: React.FC<GoogleSheetsSyncModalProps> = ({
@@ -51,16 +70,20 @@ export const GoogleSheetsSyncModal: React.FC<GoogleSheetsSyncModalProps> = ({
   title,
   subtitle,
   defaultNewSheetName,
+  mode = 'export',
+  cases = [],
+  defaultSpreadsheetId = TARGET_SPREADSHEET_ID,
   prepareTabsToWrite,
+  onDetailsImported,
 }) => {
   const { isRtl } = useThemeLanguage();
   const [needsAuth, setNeedsAuth] = useState(true);
-  const [googleUser, setGoogleUser] = useState<FirebaseUser | null>(null);
+  const [googleUser, setGoogleUser] = useState<GoogleWorkspaceUser | null>(null);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   const [spreadsheets, setSpreadsheets] = useState<DriveSpreadsheetItem[]>([]);
   const [isLoadingFiles, setIsLoadingFiles] = useState(false);
-  const [sheetIdInput, setSheetIdInput] = useState('');
+  const [sheetIdInput, setSheetIdInput] = useState(defaultSpreadsheetId);
   const [newSheetTitle, setNewSheetTitle] = useState(defaultNewSheetName);
   const [isCreatingSheet, setIsCreatingSheet] = useState(false);
 
@@ -69,19 +92,32 @@ export const GoogleSheetsSyncModal: React.FC<GoogleSheetsSyncModalProps> = ({
   const [previewRows, setPreviewRows] = useState<string[][]>([]);
   const [isLoadingPreview, setIsLoadingPreview] = useState(false);
 
-  // Explicit confirmation dialog state before any destructive/mutating Google Sheets write
+  // Details tab inspection & column mapping state
+  const [detailsInspection, setDetailsInspection] = useState<DetailsTabInspectionResult | null>(null);
+  const [customFieldMap, setCustomFieldMap] = useState<Record<string, MappableCaseField | ''>>({});
+  const [includeMissingColumns, setIncludeMissingColumns] = useState(false);
+  const [isImportingDetails, setIsImportingDetails] = useState(false);
+
+  // Explicit confirmation dialog state before any mutating Google Sheets write or CRM overwrite
   const [pendingWriteConfirmation, setPendingWriteConfirmation] = useState<{
+    kind: 'details_sync' | 'export_tabs' | 'details_import';
     meta: SpreadsheetMetadata;
-    tabs: SheetWriteTab[];
+    tabs?: SheetWriteTab[];
     totalRows: number;
+    toAddCount?: number;
+    toUpdateCount?: number;
   } | null>(null);
   const [isWriting, setIsWriting] = useState(false);
   const [writeSuccess, setWriteSuccess] = useState<{
     spreadsheetUrl: string;
-    updatedTabs: string[];
-    totalRows: number;
+    message: string;
   } | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const detailsDiff = useMemo(() => {
+    if (!detailsInspection) return null;
+    return computeDetailsSyncDiff(cases, detailsInspection.cases);
+  }, [cases, detailsInspection]);
 
   const loadFiles = useCallback(async () => {
     setIsLoadingFiles(true);
@@ -100,9 +136,72 @@ export const GoogleSheetsSyncModal: React.FC<GoogleSheetsSyncModalProps> = ({
     }
   }, []);
 
+  const handleInspectSpreadsheet = useCallback(
+    async (
+      idOrUrl: string,
+      mapOverride?: Record<string, MappableCaseField | ''>
+    ) => {
+      setErrorMsg(null);
+      setWriteSuccess(null);
+      setIsLoadingPreview(true);
+      try {
+        const activeMap = mapOverride ?? customFieldMap;
+        const trimmed = (idOrUrl || '').trim() || TARGET_SPREADSHEET_ID;
+        const isDetailsModeOrTarget =
+          mode === 'details' || trimmed.includes(TARGET_SPREADSHEET_ID);
+
+        if (isDetailsModeOrTarget) {
+          const inspection = await fetchDetailsTabFromTargetSheet(
+            trimmed,
+            TARGET_DETAILS_TAB,
+            activeMap
+          );
+          setDetailsInspection(inspection);
+          setSelectedMeta({
+            spreadsheetId: inspection.spreadsheetId,
+            title: inspection.title,
+            spreadsheetUrl: inspection.spreadsheetUrl,
+            sheets: inspection.sheets,
+          });
+          setSheetIdInput(inspection.spreadsheetId);
+          setSelectedTabTitle(inspection.detailsTabTitle);
+          setPreviewRows(
+            inspection.rows.map((r) => r.map((c) => (c === undefined || c === null ? '' : String(c))))
+          );
+        } else {
+          setDetailsInspection(null);
+          const meta = await getSpreadsheetMetadata(trimmed);
+          setSelectedMeta(meta);
+          setSheetIdInput(meta.spreadsheetId);
+          const firstTab =
+            meta.sheets.find((s) => s.title.toLowerCase() === 'details')?.title ||
+            meta.sheets[0]?.title ||
+            '';
+          setSelectedTabTitle(firstTab);
+          if (firstTab) {
+            const rows = await readSheetPreview(meta.spreadsheetId, firstTab);
+            setPreviewRows(rows);
+          } else {
+            setPreviewRows([]);
+          }
+        }
+      } catch (err: any) {
+        if (err?.code === 'AUTH_REQUIRED') {
+          setNeedsAuth(true);
+        } else {
+          setErrorMsg(err?.message || 'تعذر فتح ملف Google Sheets المحدد.');
+        }
+      } finally {
+        setIsLoadingPreview(false);
+      }
+    },
+    [customFieldMap, mode]
+  );
+
   useEffect(() => {
     if (!isOpen) return;
     setNewSheetTitle(defaultNewSheetName);
+    setSheetIdInput(defaultSpreadsheetId || TARGET_SPREADSHEET_ID);
     setWriteSuccess(null);
     setPendingWriteConfirmation(null);
     setErrorMsg(null);
@@ -114,6 +213,7 @@ export const GoogleSheetsSyncModal: React.FC<GoogleSheetsSyncModalProps> = ({
         setGoogleUser(user);
         setNeedsAuth(false);
         loadFiles();
+        handleInspectSpreadsheet(defaultSpreadsheetId || TARGET_SPREADSHEET_ID);
       } else {
         setNeedsAuth(true);
       }
@@ -132,7 +232,7 @@ export const GoogleSheetsSyncModal: React.FC<GoogleSheetsSyncModalProps> = ({
     );
 
     return () => unsub();
-  }, [isOpen, defaultNewSheetName, loadFiles]);
+  }, [isOpen, defaultNewSheetName, defaultSpreadsheetId, loadFiles, handleInspectSpreadsheet]);
 
   const handleGoogleSignIn = async () => {
     setIsLoggingIn(true);
@@ -142,6 +242,7 @@ export const GoogleSheetsSyncModal: React.FC<GoogleSheetsSyncModalProps> = ({
       setGoogleUser(result.user);
       setNeedsAuth(false);
       await loadFiles();
+      await handleInspectSpreadsheet(sheetIdInput || defaultSpreadsheetId || TARGET_SPREADSHEET_ID);
     } catch (err: any) {
       setErrorMsg(err?.message || 'تعذر تسجيل الدخول بحساب Google.');
     } finally {
@@ -155,34 +256,8 @@ export const GoogleSheetsSyncModal: React.FC<GoogleSheetsSyncModalProps> = ({
     setNeedsAuth(true);
     setSpreadsheets([]);
     setSelectedMeta(null);
+    setDetailsInspection(null);
     setPreviewRows([]);
-  };
-
-  const handleInspectSpreadsheet = async (idOrUrl: string) => {
-    setErrorMsg(null);
-    setWriteSuccess(null);
-    setIsLoadingPreview(true);
-    try {
-      const meta = await getSpreadsheetMetadata(idOrUrl);
-      setSelectedMeta(meta);
-      setSheetIdInput(meta.spreadsheetId);
-      const firstTab = meta.sheets[0]?.title || '';
-      setSelectedTabTitle(firstTab);
-      if (firstTab) {
-        const rows = await readSheetPreview(meta.spreadsheetId, firstTab);
-        setPreviewRows(rows);
-      } else {
-        setPreviewRows([]);
-      }
-    } catch (err: any) {
-      if (err?.code === 'AUTH_REQUIRED') {
-        setNeedsAuth(true);
-      } else {
-        setErrorMsg(err?.message || 'تعذر فتح ملف Google Sheets المحدد.');
-      }
-    } finally {
-      setIsLoadingPreview(false);
-    }
   };
 
   const handleSwitchPreviewTab = async (tabTitle: string) => {
@@ -191,12 +266,38 @@ export const GoogleSheetsSyncModal: React.FC<GoogleSheetsSyncModalProps> = ({
     setIsLoadingPreview(true);
     setErrorMsg(null);
     try {
-      const rows = await readSheetPreview(selectedMeta.spreadsheetId, tabTitle);
-      setPreviewRows(rows);
+      if (
+        mode === 'details' ||
+        selectedMeta.spreadsheetId === TARGET_SPREADSHEET_ID ||
+        tabTitle.toLowerCase() === 'details'
+      ) {
+        const inspection = await fetchDetailsTabFromTargetSheet(
+          selectedMeta.spreadsheetId,
+          tabTitle,
+          customFieldMap
+        );
+        setDetailsInspection(inspection);
+        setPreviewRows(
+          inspection.rows.map((r) => r.map((c) => (c === undefined || c === null ? '' : String(c))))
+        );
+      } else {
+        setDetailsInspection(null);
+        const rows = await readSheetPreview(selectedMeta.spreadsheetId, tabTitle);
+        setPreviewRows(rows);
+      }
     } catch (err: any) {
-      setErrorMsg(err?.message || 'تعذر قراءة بيانات الورقة.');
+      if (err?.code === 'AUTH_REQUIRED') setNeedsAuth(true);
+      else setErrorMsg(err?.message || 'تعذر قراءة بيانات الورقة.');
     } finally {
       setIsLoadingPreview(false);
+    }
+  };
+
+  const handleChangeColumnMapping = async (headerName: string, nextField: MappableCaseField | '') => {
+    const nextMap = { ...customFieldMap, [headerName]: nextField };
+    setCustomFieldMap(nextMap);
+    if (selectedMeta) {
+      await handleInspectSpreadsheet(selectedMeta.spreadsheetId, nextMap);
     }
   };
 
@@ -205,11 +306,12 @@ export const GoogleSheetsSyncModal: React.FC<GoogleSheetsSyncModalProps> = ({
     setIsCreatingSheet(true);
     setErrorMsg(null);
     try {
-      const tabs = await prepareTabsToWrite();
+      const tabs = prepareTabsToWrite ? await prepareTabsToWrite() : [{ title: TARGET_DETAILS_TAB, rows: [] }];
       const created = await createGoogleSpreadsheet(
         newSheetTitle.trim(),
         tabs.map((t) => t.title)
       );
+      setDetailsInspection(null);
       setSelectedMeta(created);
       setSheetIdInput(created.spreadsheetId);
       setSelectedTabTitle(created.sheets[0]?.title || '');
@@ -223,38 +325,100 @@ export const GoogleSheetsSyncModal: React.FC<GoogleSheetsSyncModalProps> = ({
     }
   };
 
-  const handleRequestWriteConfirmation = async () => {
-    if (!selectedMeta) {
-      setErrorMsg('يرجى اختيار ملف Google Sheets أو إنشاء ملف جديد أولاً.');
+  const handleRequestExportWriteConfirmation = async () => {
+    if (!selectedMeta || !prepareTabsToWrite) {
+      setErrorMsg('يرجى اختيار ملف Google Sheets أولاً.');
       return;
     }
     setErrorMsg(null);
     try {
       const tabs = await prepareTabsToWrite();
       const totalRows = tabs.reduce((sum, t) => sum + Math.max(0, t.rows.length - 1), 0);
-      setPendingWriteConfirmation({ meta: selectedMeta, tabs, totalRows });
+      setPendingWriteConfirmation({
+        kind: 'export_tabs',
+        meta: selectedMeta,
+        tabs,
+        totalRows,
+      });
     } catch (err: any) {
       setErrorMsg(err?.message || 'تعذر تجهيز البيانات للكتابة.');
     }
   };
 
-  const handleConfirmWrite = async () => {
+  const handleRequestDetailsSyncConfirmation = () => {
+    if (!selectedMeta) {
+      setErrorMsg('يرجى فتح جدول البيانات المستهدف أولاً.');
+      return;
+    }
+    setErrorMsg(null);
+    const activeCases = cases.filter((c) => !c.isDeleted);
+    setPendingWriteConfirmation({
+      kind: 'details_sync',
+      meta: selectedMeta,
+      totalRows: activeCases.length,
+      toAddCount: detailsDiff?.toAddCount ?? activeCases.length,
+      toUpdateCount: detailsDiff?.toUpdateCount ?? 0,
+    });
+  };
+
+  const handleRequestDetailsImportConfirmation = () => {
+    if (!selectedMeta || !detailsInspection) return;
+    setErrorMsg(null);
+    setPendingWriteConfirmation({
+      kind: 'details_import',
+      meta: selectedMeta,
+      totalRows: detailsInspection.cases.length,
+    });
+  };
+
+  const handleConfirmAction = async () => {
     if (!pendingWriteConfirmation) return;
     setIsWriting(true);
+    setIsImportingDetails(pendingWriteConfirmation.kind === 'details_import');
     setErrorMsg(null);
     try {
-      const res = await writeTabsToSpreadsheet(
-        pendingWriteConfirmation.meta.spreadsheetId,
-        pendingWriteConfirmation.tabs
-      );
-      setWriteSuccess(res);
-      setPendingWriteConfirmation(null);
-      await handleInspectSpreadsheet(pendingWriteConfirmation.meta.spreadsheetId);
+      if (pendingWriteConfirmation.kind === 'details_import') {
+        const casesToImport = detailsInspection?.cases || [];
+        const res = await importDetailsCasesIntoAppStore(casesToImport);
+        setPendingWriteConfirmation(null);
+        setWriteSuccess({
+          spreadsheetUrl: pendingWriteConfirmation.meta.spreadsheetUrl,
+          message: `تم استيراد ومزامنة ${res.importedCount} حالة من تبويب ${detailsInspection?.detailsTabTitle || TARGET_DETAILS_TAB} إلى قاعدة بيانات المنظومة بنجاح.`,
+        });
+        onDetailsImported?.(res.importedCount);
+      } else if (pendingWriteConfirmation.kind === 'details_sync') {
+        const activeCases = cases.filter((c) => !c.isDeleted);
+        const res = await syncCasesToDetailsTab({
+          spreadsheetId: pendingWriteConfirmation.meta.spreadsheetId,
+          tabName: detailsInspection?.detailsTabTitle || TARGET_DETAILS_TAB,
+          cases: activeCases,
+          includeMissingColumns,
+          customFieldMap,
+        });
+        setPendingWriteConfirmation(null);
+        setWriteSuccess({
+          spreadsheetUrl: res.spreadsheetUrl,
+          message: `تمت مزامنة ${res.totalRows} حالة بنجاح إلى تبويب «${res.tabTitle}» في Google Sheets.`,
+        });
+        await handleInspectSpreadsheet(res.spreadsheetId);
+      } else if (pendingWriteConfirmation.kind === 'export_tabs' && pendingWriteConfirmation.tabs) {
+        const res = await writeTabsToSpreadsheet(
+          pendingWriteConfirmation.meta.spreadsheetId,
+          pendingWriteConfirmation.tabs
+        );
+        setPendingWriteConfirmation(null);
+        setWriteSuccess({
+          spreadsheetUrl: res.spreadsheetUrl,
+          message: `تمت مزامنة ${res.totalRows} سجل بنجاح في أوراق (${res.updatedTabs.join('، ')}).`,
+        });
+        await handleInspectSpreadsheet(pendingWriteConfirmation.meta.spreadsheetId);
+      }
     } catch (err: any) {
       if (err?.code === 'AUTH_REQUIRED') setNeedsAuth(true);
-      else setErrorMsg(err?.message || 'تعذر تحديث بيانات Google Sheets.');
+      else setErrorMsg(err?.message || 'تعذر تنفيذ المزامنة مع Google Sheets.');
     } finally {
       setIsWriting(false);
+      setIsImportingDetails(false);
     }
   };
 
@@ -268,7 +432,7 @@ export const GoogleSheetsSyncModal: React.FC<GoogleSheetsSyncModalProps> = ({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="bg-white dark:bg-[#0B1D35] rounded-2xl w-full max-w-3xl my-auto max-h-[92dvh] flex flex-col shadow-2xl border border-slate-200 dark:border-[#004B87] overflow-hidden animate-scale-in text-start"
+        className="bg-white dark:bg-[#0B1D35] rounded-2xl w-full max-w-4xl my-auto max-h-[92dvh] flex flex-col shadow-2xl border border-slate-200 dark:border-[#004B87] overflow-hidden animate-scale-in text-start"
       >
         {/* Header */}
         <div className="bg-[#00264D] p-4 sm:p-5 text-white flex items-center justify-between gap-3 border-b border-[#004B87] shrink-0">
@@ -294,6 +458,27 @@ export const GoogleSheetsSyncModal: React.FC<GoogleSheetsSyncModalProps> = ({
         </div>
 
         <div className="p-4 sm:p-5 overflow-y-auto space-y-4 text-xs">
+          {/* Target Spreadsheet Reference Bar */}
+          <div className="p-3 bg-slate-50 dark:bg-[#071629] border border-slate-200 dark:border-[#00386B] rounded-xl flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-2 min-w-0">
+              <span className="font-bold text-slate-700 dark:text-slate-200">
+                جدول البيانات المستهدف (Tab: <span className="font-mono text-[#00A651]">{TARGET_DETAILS_TAB}</span>):
+              </span>
+              <code className="px-2 py-0.5 rounded bg-white dark:bg-[#0B1D35] border border-slate-200 dark:border-[#00386B] font-mono text-[11px] text-[#004B87] dark:text-sky-300 truncate max-w-full">
+                {TARGET_SPREADSHEET_ID}
+              </code>
+            </div>
+            <a
+              href={TARGET_SPREADSHEET_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-[#004B87] dark:text-[#00E676] font-bold hover:underline shrink-0"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              <span>فتح الملف في Google Sheets</span>
+            </a>
+          </div>
+
           {errorMsg && (
             <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-xl text-rose-800 dark:text-rose-200 font-bold flex items-center gap-2">
               <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
@@ -305,9 +490,7 @@ export const GoogleSheetsSyncModal: React.FC<GoogleSheetsSyncModalProps> = ({
             <div className="p-3.5 bg-emerald-50 dark:bg-[#00A651]/15 border border-emerald-300 dark:border-[#00A651] rounded-xl text-emerald-900 dark:text-emerald-200 space-y-1.5">
               <div className="font-bold flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-[#00A651] shrink-0" />
-                <span>
-                  تمت مزامنة {writeSuccess.totalRows} سجل بنجاح في أوراق ({writeSuccess.updatedTabs.join('، ')}).
-                </span>
+                <span>{writeSuccess.message}</span>
               </div>
               <a
                 href={writeSuccess.spreadsheetUrl}
@@ -328,10 +511,11 @@ export const GoogleSheetsSyncModal: React.FC<GoogleSheetsSyncModalProps> = ({
               </div>
               <div className="space-y-1">
                 <h3 className="font-black text-sm text-slate-900 dark:text-white">
-                  ربط حساب Google للوصول إلى Google Sheets و Google Drive
+                  ربط حساب Google للوصول إلى قاعدة بيانات Google Sheets (ورقة {TARGET_DETAILS_TAB})
                 </h3>
                 <p className="text-slate-600 dark:text-slate-300 max-w-md mx-auto leading-relaxed">
-                  سجّل الدخول بحسابك في Google لقراءة جداول البيانات الموجودة أو إنشاء ومزامنة تقارير الحالات ونسخ المنظومة مباشرة.
+                  سجّل الدخول بحسابك في Google لقراءة ورقة <strong>{TARGET_DETAILS_TAB}</strong> من الجدول{' '}
+                  <span className="font-mono text-[11px]">{TARGET_SPREADSHEET_ID}</span> ومطابقة الحقول ومزامنة الحالات.
                 </p>
               </div>
 
@@ -400,14 +584,14 @@ export const GoogleSheetsSyncModal: React.FC<GoogleSheetsSyncModalProps> = ({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div className="p-3.5 bg-slate-50 dark:bg-[#071629] border border-slate-200 dark:border-[#00386B] rounded-xl space-y-2">
                   <label className="font-bold text-slate-800 dark:text-slate-100 block">
-                    فتح جدول بيانات بالرابط أو المعرف (Spreadsheet ID):
+                    معرف أو رابط جدول Google Sheets:
                   </label>
                   <div className="flex gap-2">
                     <input
                       type="text"
                       value={sheetIdInput}
                       onChange={(e) => setSheetIdInput(e.target.value)}
-                      placeholder="https://docs.google.com/spreadsheets/d/..."
+                      placeholder={TARGET_SPREADSHEET_ID}
                       className="flex-1 p-2 bg-white dark:bg-[#0B1D35] border border-slate-300 dark:border-[#004B87] rounded-lg font-mono text-[11px] text-slate-900 dark:text-white"
                       dir="ltr"
                     />
@@ -418,7 +602,7 @@ export const GoogleSheetsSyncModal: React.FC<GoogleSheetsSyncModalProps> = ({
                       className="px-3 py-2 bg-[#004B87] hover:bg-[#00386B] text-white font-bold rounded-lg flex items-center gap-1 disabled:opacity-50 cursor-pointer"
                     >
                       <Search className="w-3.5 h-3.5" />
-                      <span>فتح</span>
+                      <span>فحص وقراءة</span>
                     </button>
                   </div>
                 </div>
@@ -448,12 +632,149 @@ export const GoogleSheetsSyncModal: React.FC<GoogleSheetsSyncModalProps> = ({
                 </div>
               </div>
 
+              {/* Details Tab Field Mapping & Bidirectional Sync Section */}
+              {detailsInspection && (
+                <div className="p-4 bg-[#E6F7EF]/60 dark:bg-[#071629] border-2 border-[#00A651]/40 dark:border-[#00A651] rounded-xl space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="space-y-0.5">
+                      <div className="font-black text-sm text-slate-900 dark:text-white flex items-center gap-2">
+                        <ArrowLeftRight className="w-4 h-4 text-[#00A651]" />
+                        <span>
+                          مطابقة حقول النظام مع أعمدة تبويب «{detailsInspection.detailsTabTitle}»
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-600 dark:text-slate-300">
+                        {detailsInspection.hasDetailsTab
+                          ? `تم رصد ${detailsInspection.headers.length} عمود و ${detailsInspection.cases.length} صف بيانات داخل ورقة ${detailsInspection.detailsTabTitle}.`
+                          : `ورقة "${TARGET_DETAILS_TAB}" غير موجودة حالياً في هذا الملف — سيتم إنشاؤها تلقائياً عند المزامنة.`}
+                      </p>
+                    </div>
+
+                    {detailsDiff && (
+                      <div className="flex flex-wrap items-center gap-2 text-[11px] font-bold">
+                        <span className="px-2 py-1 rounded-lg bg-white dark:bg-[#0B1D35] border border-slate-200 dark:border-[#00386B] text-[#004B87] dark:text-sky-300">
+                          في CRM: {cases.filter((c) => !c.isDeleted).length}
+                        </span>
+                        <span className="px-2 py-1 rounded-lg bg-white dark:bg-[#0B1D35] border border-slate-200 dark:border-[#00386B] text-[#00A651] dark:text-[#00E676]">
+                          إضافة للشيت: +{detailsDiff.toAddCount}
+                        </span>
+                        <span className="px-2 py-1 rounded-lg bg-white dark:bg-[#0B1D35] border border-slate-200 dark:border-[#00386B] text-amber-700 dark:text-amber-300">
+                          تحديث: {detailsDiff.toUpdateCount}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Column-to-Field Mapping Table */}
+                  {detailsInspection.schema.mappings.length > 0 && (
+                    <div className="max-h-52 overflow-y-auto border border-slate-200 dark:border-[#00386B] rounded-xl bg-white dark:bg-[#0B1D35]">
+                      <table className="w-full text-[11px] text-start">
+                        <thead className="bg-[#00264D] text-white sticky top-0">
+                          <tr>
+                            <th className="p-2 font-bold">عمود في Google Sheets ({detailsInspection.detailsTabTitle})</th>
+                            <th className="p-2 font-bold">حالة المطابقة</th>
+                            <th className="p-2 font-bold">الحقل المقابل في CRM</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 dark:divide-[#00386B]/70">
+                          {detailsInspection.schema.mappings.map((col) => (
+                            <tr key={`${col.colIndex}-${col.headerName}`}>
+                              <td className="p-2 font-bold text-slate-800 dark:text-slate-100">
+                                {col.headerName || `عمود ${col.colIndex + 1}`}
+                              </td>
+                              <td className="p-2">
+                                {col.matchConfidence === 'custom' ? (
+                                  <span className="px-1.5 py-0.5 rounded bg-sky-100 dark:bg-sky-900/50 text-sky-800 dark:text-sky-200 font-bold">
+                                    تعيين يدوي
+                                  </span>
+                                ) : col.matchConfidence === 'exact' ? (
+                                  <span className="px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-[#00A651]/25 text-emerald-800 dark:text-[#00E676] font-bold">
+                                    تطابق مباشر
+                                  </span>
+                                ) : col.matchConfidence === 'alias' ? (
+                                  <span className="px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-[#00A651]/15 text-[#008742] dark:text-[#00E676] font-bold">
+                                    تطابق تلقائي
+                                  </span>
+                                ) : (
+                                  <span className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold">
+                                    عمود إضافي (يُحفظ كما هو)
+                                  </span>
+                                )}
+                              </td>
+                              <td className="p-2">
+                                <select
+                                  value={
+                                    customFieldMap[col.headerName] !== undefined
+                                      ? customFieldMap[col.headerName]
+                                      : col.mappedField || ''
+                                  }
+                                  onChange={(e) =>
+                                    handleChangeColumnMapping(
+                                      col.headerName,
+                                      (e.target.value || '') as MappableCaseField | ''
+                                    )
+                                  }
+                                  className="w-full p-1.5 rounded-lg bg-slate-50 dark:bg-[#071629] border border-slate-200 dark:border-[#00386B] text-slate-800 dark:text-slate-100 font-bold"
+                                >
+                                  <option value="">-- غير مربوط (حفظ العمود فقط) --</option>
+                                  {DETAILS_COLUMN_DEFINITIONS.map((def) => (
+                                    <option key={def.field} value={def.field}>
+                                      {def.arabicLabel} ({def.defaultHeader})
+                                    </option>
+                                  ))}
+                                </select>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                    <label className="inline-flex items-center gap-2 text-[11px] font-bold text-slate-700 dark:text-slate-200 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={includeMissingColumns}
+                        onChange={(e) => setIncludeMissingColumns(e.target.checked)}
+                        className="w-4 h-4 accent-[#00A651] rounded"
+                      />
+                      <span>إضافة أعمدة الحقول الناقصة من CRM إلى ورقة {TARGET_DETAILS_TAB} عند المزامنة</span>
+                    </label>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      {detailsInspection.cases.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={handleRequestDetailsImportConfirmation}
+                          disabled={isWriting || isImportingDetails}
+                          className="px-3.5 py-2 rounded-xl bg-[#004B87] hover:bg-[#00386B] text-white font-black flex items-center gap-1.5 shadow-sm transition-all active:scale-95 cursor-pointer"
+                        >
+                          <DownloadCloud className="w-4 h-4" />
+                          <span>استيراد من {detailsInspection.detailsTabTitle} ({detailsInspection.cases.length})</span>
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={handleRequestDetailsSyncConfirmation}
+                        disabled={isWriting}
+                        className="px-4 py-2 rounded-xl bg-[#00A651] hover:bg-[#008742] text-white font-black flex items-center gap-1.5 shadow-md transition-all active:scale-95 cursor-pointer"
+                      >
+                        <UploadCloud className="w-4 h-4" />
+                        <span>مزامنة الحالات إلى ورقة {detailsInspection.detailsTabTitle}</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Recent Google Drive Spreadsheets */}
               <div className="space-y-1.5">
                 <div className="font-bold text-slate-700 dark:text-slate-200">
                   ملفات Google Sheets في حسابك ({spreadsheets.length}):
                 </div>
-                <div className="max-h-36 overflow-y-auto border border-slate-200 dark:border-[#00386B] rounded-xl divide-y divide-slate-100 dark:divide-[#00386B]/70">
+                <div className="max-h-32 overflow-y-auto border border-slate-200 dark:border-[#00386B] rounded-xl divide-y divide-slate-100 dark:divide-[#00386B]/70">
                   {spreadsheets.map((file) => {
                     const active = selectedMeta?.spreadsheetId === file.id;
                     return (
@@ -487,8 +808,8 @@ export const GoogleSheetsSyncModal: React.FC<GoogleSheetsSyncModalProps> = ({
                     );
                   })}
                   {!isLoadingFiles && spreadsheets.length === 0 && (
-                    <div className="p-4 text-center text-slate-400">
-                      لا توجد جداول بيانات متاحة أو يمكنك لصق رابط ملف Google Sheets مباشرة أعلاه.
+                    <div className="p-3 text-center text-slate-400">
+                      لا توجد جداول بيانات أخرى معروضة — يمكنك استخدام الجدول المستهدف أو لصق المعرف أعلاه.
                     </div>
                   )}
                 </div>
@@ -513,15 +834,17 @@ export const GoogleSheetsSyncModal: React.FC<GoogleSheetsSyncModalProps> = ({
                       </a>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={handleRequestWriteConfirmation}
-                      disabled={isWriting}
-                      className="px-4 py-2 bg-[#00A651] hover:bg-[#008742] text-white font-black rounded-xl shadow-md flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
-                    >
-                      <UploadCloud className="w-4 h-4" />
-                      <span>مزامنة وكتابة البيانات إلى هذا الملف</span>
-                    </button>
+                    {prepareTabsToWrite && (
+                      <button
+                        type="button"
+                        onClick={handleRequestExportWriteConfirmation}
+                        disabled={isWriting}
+                        className="px-4 py-2 bg-[#00A651] hover:bg-[#008742] text-white font-black rounded-xl shadow-md flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+                      >
+                        <UploadCloud className="w-4 h-4" />
+                        <span>كتابة أوراق التقرير إلى هذا الملف</span>
+                      </button>
+                    )}
                   </div>
 
                   {/* Sheet Tabs */}
@@ -548,7 +871,7 @@ export const GoogleSheetsSyncModal: React.FC<GoogleSheetsSyncModalProps> = ({
                   {isLoadingPreview ? (
                     <div className="p-4 text-center text-slate-500">جارٍ قراءة بيانات الورقة...</div>
                   ) : previewRows.length > 0 ? (
-                    <div className="overflow-x-auto max-h-48 border border-slate-200 dark:border-[#00386B] rounded-lg bg-white dark:bg-[#0B1D35]">
+                    <div className="overflow-x-auto max-h-44 border border-slate-200 dark:border-[#00386B] rounded-lg bg-white dark:bg-[#0B1D35]">
                       <table className="w-full text-[11px] text-start">
                         <tbody>
                           {previewRows.slice(0, 10).map((row, rIdx) => (
@@ -578,26 +901,50 @@ export const GoogleSheetsSyncModal: React.FC<GoogleSheetsSyncModalProps> = ({
                 </div>
               )}
 
-              {/* Explicit Confirmation Dialog before overwriting/updating Google Sheets */}
+              {/* Explicit Confirmation Dialog before overwriting/updating Google Sheets or CRM */}
               {pendingWriteConfirmation && (
                 <div className="p-4 bg-amber-50 dark:bg-amber-950/40 border-2 border-amber-400 dark:border-amber-600 rounded-xl space-y-3 animate-scale-in">
                   <div className="flex items-start gap-2.5 text-amber-900 dark:text-amber-200">
                     <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
                     <div className="space-y-1">
                       <div className="font-black text-sm">
-                        تأكيد تحديث وكتابة البيانات في Google Sheets
+                        {pendingWriteConfirmation.kind === 'details_import'
+                          ? 'تأكيد استيراد الحالات من تبويب Details إلى قاعدة بيانات CRM'
+                          : 'تأكيد تحديث وكتابة البيانات في Google Sheets'}
                       </div>
-                      <p className="leading-relaxed">
-                        سيتم تحديث واستبدال محتوى الأوراق التالية داخل الملف{' '}
-                        <strong>«{pendingWriteConfirmation.meta.title}»</strong>:
-                      </p>
-                      <ul className="list-disc list-inside font-bold text-[11px]">
-                        {pendingWriteConfirmation.tabs.map((t) => (
-                          <li key={t.title}>
-                            ورقة «{t.title}» ({Math.max(0, t.rows.length - 1)} صف)
-                          </li>
-                        ))}
-                      </ul>
+                      {pendingWriteConfirmation.kind === 'details_import' ? (
+                        <p className="leading-relaxed">
+                          سيتم استيراد ودمج <strong>{pendingWriteConfirmation.totalRows}</strong> حالة من تبويب{' '}
+                          <strong>«{detailsInspection?.detailsTabTitle || TARGET_DETAILS_TAB}»</strong> في الملف{' '}
+                          <span className="font-mono">{pendingWriteConfirmation.meta.spreadsheetId}</span> داخل قاعدة بيانات المنظومة.
+                        </p>
+                      ) : pendingWriteConfirmation.kind === 'details_sync' ? (
+                        <div className="space-y-1">
+                          <p className="leading-relaxed">
+                            سيتم تحديث واستبدال بيانات تبويب <strong>«{detailsInspection?.detailsTabTitle || TARGET_DETAILS_TAB}»</strong> داخل جدول Google Sheets{' '}
+                            <strong>«{pendingWriteConfirmation.meta.title}»</strong> (<span className="font-mono">{pendingWriteConfirmation.meta.spreadsheetId}</span>):
+                          </p>
+                          <ul className="list-disc list-inside font-bold text-[11px]">
+                            <li>إجمالي الحالات التي ستُكتب: {pendingWriteConfirmation.totalRows} صف</li>
+                            <li>سجلات جديدة ستُضاف: {pendingWriteConfirmation.toAddCount ?? 0}</li>
+                            <li>سجلات حالية ستُحدّث: {pendingWriteConfirmation.toUpdateCount ?? 0}</li>
+                          </ul>
+                        </div>
+                      ) : (
+                        <>
+                          <p className="leading-relaxed">
+                            سيتم تحديث واستبدال محتوى الأوراق التالية داخل الملف{' '}
+                            <strong>«{pendingWriteConfirmation.meta.title}»</strong>:
+                          </p>
+                          <ul className="list-disc list-inside font-bold text-[11px]">
+                            {(pendingWriteConfirmation.tabs || []).map((t) => (
+                              <li key={t.title}>
+                                ورقة «{t.title}» ({Math.max(0, t.rows.length - 1)} صف)
+                              </li>
+                            ))}
+                          </ul>
+                        </>
+                      )}
                     </div>
                   </div>
                   <div className="flex items-center justify-end gap-2">
@@ -605,20 +952,22 @@ export const GoogleSheetsSyncModal: React.FC<GoogleSheetsSyncModalProps> = ({
                       type="button"
                       onClick={() => setPendingWriteConfirmation(null)}
                       disabled={isWriting}
-                      className="px-3.5 py-2 rounded-xl text-slate-700 dark:text-slate-200 hover:bg-white/60 font-bold cursor-pointer"
+                      className="px-3.5 py-2 rounded-xl text-slate-700 dark:text-slate-200 hover:bg-white/60 dark:hover:bg-white/10 font-bold cursor-pointer"
                     >
                       إلغاء
                     </button>
                     <button
                       type="button"
-                      onClick={handleConfirmWrite}
+                      onClick={handleConfirmAction}
                       disabled={isWriting}
                       className="px-4 py-2 rounded-xl bg-[#00A651] hover:bg-[#008742] text-white font-black shadow-md flex items-center gap-1.5 cursor-pointer"
                     >
                       <CheckCircle2 className="w-4 h-4" />
                       <span>
                         {isWriting
-                          ? 'جارٍ الكتابة إلى Google Sheets...'
+                          ? 'جارٍ التنفيذ...'
+                          : pendingWriteConfirmation.kind === 'details_import'
+                          ? `تأكيد الاستيراد (${pendingWriteConfirmation.totalRows} حالة)`
                           : `تأكيد الكتابة (${pendingWriteConfirmation.totalRows} سجل)`}
                       </span>
                     </button>

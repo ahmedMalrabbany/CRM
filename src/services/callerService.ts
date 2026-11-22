@@ -16,10 +16,10 @@ import {
   limit,
   onSnapshot
 } from '../lib/sheetsDb';
-import { db, handleFirestoreError, OperationType } from '../config/firebase';
+import { db, handleDatabaseError, OperationType } from '../config/sheetsConfig';
 import { Caller, CallerTitle, CallerClassification, User } from '../types';
 import { logAuditEvent } from './auditService';
-import { cleanFirestoreData } from './caseService';
+import { sanitizeRecordData } from './caseService';
 
 const CALLERS_COLLECTION = 'callers';
 const CASES_COLLECTION = 'cases';
@@ -67,7 +67,7 @@ export async function findCallerByPhone(phone: string): Promise<Caller | null> {
 
     return null;
   } catch (error) {
-    handleFirestoreError(error, OperationType.GET, CALLERS_COLLECTION);
+    handleDatabaseError(error, OperationType.GET, CALLERS_COLLECTION);
   }
 }
 
@@ -187,7 +187,7 @@ export async function getCallersByTaxNumber(taxNumber: string): Promise<Caller[]
     });
     return callers;
   } catch (error) {
-    handleFirestoreError(error, OperationType.LIST, CALLERS_COLLECTION);
+    handleDatabaseError(error, OperationType.LIST, CALLERS_COLLECTION);
   }
 }
 
@@ -219,10 +219,10 @@ export async function createCaller(data: {
       createdAt: new Date().toISOString(),
     };
 
-    await setDoc(docRef, cleanFirestoreData(newCaller));
+    await setDoc(docRef, sanitizeRecordData(newCaller));
     return { id: docRef.id, ...newCaller };
   } catch (error) {
-    handleFirestoreError(error, OperationType.CREATE, CALLERS_COLLECTION);
+    handleDatabaseError(error, OperationType.CREATE, CALLERS_COLLECTION);
   }
 }
 
@@ -265,7 +265,7 @@ export async function updateCaller(
       updatedAt: now,
     };
 
-    await updateDoc(docRef, cleanFirestoreData(updatedFields));
+    await updateDoc(docRef, sanitizeRecordData(updatedFields));
 
     if (actingUser) {
       await logAuditEvent({
@@ -288,7 +288,7 @@ export async function updateCaller(
     if (error instanceof Error && error.message.includes('سجل المتصل')) {
       throw error;
     }
-    handleFirestoreError(error, OperationType.UPDATE, `${CALLERS_COLLECTION}/${callerId}`);
+    handleDatabaseError(error, OperationType.UPDATE, `${CALLERS_COLLECTION}/${callerId}`);
   }
 }
 
@@ -314,7 +314,7 @@ export async function deleteCaller(
       details: `تم حذف المتصل: ${callerName}`,
     });
   } catch (error) {
-    handleFirestoreError(error, OperationType.DELETE, `${CALLERS_COLLECTION}/${callerId}`);
+    handleDatabaseError(error, OperationType.DELETE, `${CALLERS_COLLECTION}/${callerId}`);
   }
 }
 
@@ -330,7 +330,7 @@ export function subscribeToCallers(callback: (callers: Caller[]) => void): () =>
       callback(list);
     },
     (error) => {
-      handleFirestoreError(error, OperationType.LIST, CALLERS_COLLECTION);
+      handleDatabaseError(error, OperationType.LIST, CALLERS_COLLECTION);
     }
   );
 }

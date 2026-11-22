@@ -25,6 +25,7 @@ import {
   X,
   Trash2,
   CheckSquare,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useNotifications, sortNotificationsNewestFirst } from '../context/NotificationContext';
@@ -42,6 +43,7 @@ interface NavbarProps {
   onOpenNewCase: () => void;
   onOpenSmartSearch?: () => void;
   onOpenSendNotification?: () => void;
+  onOpenSheetsSync?: () => void;
   unreadIncomingCount?: number;
   onToggleMobileMenu?: () => void;
   onRequestLogout?: () => void;
@@ -51,6 +53,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenNewCase,
   onOpenSmartSearch,
   onOpenSendNotification,
+  onOpenSheetsSync,
   onToggleMobileMenu,
   onRequestLogout,
 }) => {
@@ -195,11 +198,11 @@ export const Navbar: React.FC<NavbarProps> = ({
       {/* ========================================================================= */}
       {/* DESKTOP VIEW (lg:flex) - Clean 3-Zone Top Bar                             */}
       {/* ========================================================================= */}
-      <div className="hidden lg:flex px-5 py-2.5 items-center justify-between gap-4">
+      <div className="hidden lg:flex px-4 xl:px-5 py-2.5 items-center justify-between gap-3">
         {/* Zone 1: Brand Emblem & Wordmark */}
-        <div className="flex items-center gap-3 min-w-0">
+        <div className="flex items-center gap-2.5 shrink-0">
           <CrmLogo
-            size={40}
+            size={36}
             showText={true}
             lightMode={true}
             title={t('appTitle')}
@@ -208,30 +211,30 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
 
         {/* Zone 2: Interactive Smart Search Bar & Live Clock */}
-        <div className="flex items-center gap-3 text-xs">
+        <div className="flex items-center gap-2 text-xs min-w-0 flex-1 justify-center">
           {onOpenSmartSearch && (
             <button
               onClick={onOpenSmartSearch}
-              className="group flex items-center justify-between gap-6 bg-[#003366] hover:bg-[#004080] text-slate-200 hover:text-white px-3.5 py-2 rounded-xl border border-[#004B87] hover:border-[#00A651] transition-all duration-200 min-w-[260px] active:scale-[0.99]"
+              className="group flex items-center justify-between gap-2 bg-[#003366] hover:bg-[#004080] text-slate-200 hover:text-white px-2.5 py-2 rounded-xl border border-[#004B87] hover:border-[#00A651] transition-all duration-200 w-full max-w-[185px] xl:max-w-[220px] min-w-[130px] whitespace-nowrap active:scale-[0.99]"
             >
-              <span className="flex items-center gap-2">
-                <Search className="w-3.5 h-3.5 text-[#00E676] group-hover:scale-110 transition-transform" />
-                <span>{t('smartSearchPlaceholder')}</span>
+              <span className="flex items-center gap-1.5 min-w-0">
+                <Search className="w-3.5 h-3.5 text-[#00E676] shrink-0 group-hover:scale-110 transition-transform" />
+                <span className="truncate">{t('smartSearchPlaceholder')}</span>
               </span>
-              <span className="text-[10px] font-mono text-white bg-[#004B87] px-1.5 py-0.5 rounded border border-[#0062B0]">
+              <span className="text-[10px] font-mono text-white bg-[#004B87] px-1.5 py-0.5 rounded border border-[#0062B0] shrink-0">
                 AI
               </span>
             </button>
           )}
 
-          <div className="flex items-center gap-1.5 text-slate-200 bg-[#003366] border border-[#004B87] px-3 py-2 rounded-xl font-mono tabular-nums">
-            <Clock className="w-3.5 h-3.5 text-[#00E676]" />
+          <div className="hidden 2xl:flex items-center gap-1.5 text-slate-200 bg-[#003366] border border-[#004B87] px-2.5 py-2 rounded-xl font-mono tabular-nums whitespace-nowrap shrink-0">
+            <Clock className="w-3.5 h-3.5 text-[#00E676] shrink-0" />
             <span>{currentTime}</span>
           </div>
         </div>
 
         {/* Zone 3: Actions, Notifications, User Profile */}
-        <div className="flex items-center gap-2.5 shrink-0">
+        <div className="flex items-center gap-1.5 xl:gap-2 shrink-0">
           <PWAInstallButton variant="navbar" />
 
           {/* Sound Alerts Toggle */}
@@ -274,7 +277,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Language Switcher */}
           <button
             onClick={toggleLanguage}
-            className="px-2.5 py-2 rounded-xl bg-[#003366] hover:bg-[#004080] text-slate-100 hover:text-white border border-[#004B87] transition-all duration-200 hover:-translate-y-0.5 active:scale-95 text-xs font-bold flex items-center gap-1.5 whitespace-nowrap"
+            className="px-2 py-2 rounded-xl bg-[#003366] hover:bg-[#004080] text-slate-100 hover:text-white border border-[#004B87] transition-all duration-200 hover:-translate-y-0.5 active:scale-95 text-xs font-bold flex items-center gap-1 whitespace-nowrap"
             title={language === 'ar' ? 'Switch to English' : 'التحويل إلى العربية'}
             aria-label="Change Language"
           >
@@ -287,11 +290,33 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Primary Action: New Case Button (Solid ETA Emerald Green) */}
           <button
             onClick={onOpenNewCase}
-            className="px-4 py-2 bg-[#00A651] hover:bg-[#008742] text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all duration-200 shadow-md hover:-translate-y-0.5 active:scale-95 whitespace-nowrap"
+            className="px-3 py-2 bg-[#00A651] hover:bg-[#008742] text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all duration-200 shadow-md hover:-translate-y-0.5 active:scale-95 whitespace-nowrap"
           >
             <Plus className="w-4 h-4 stroke-[2.5]" />
             <span>{t('newCase')}</span>
           </button>
+
+          {/* Admin / Management / Tech Support: Google Sheets Details Sync */}
+          {(currentUser?.role === 'super_admin' ||
+            currentUser?.role === 'management' ||
+            currentUser?.role === 'technical_support') &&
+            onOpenSheetsSync && (
+              <button
+                type="button"
+                onClick={onOpenSheetsSync}
+                className="px-2.5 py-2 bg-[#003366] hover:bg-[#004080] text-[#00E676] hover:text-white border border-[#004B87] hover:border-[#00A651] rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all duration-200 hover:-translate-y-0.5 active:scale-95 whitespace-nowrap"
+                title={
+                  language === 'ar'
+                    ? 'مزامنة ورقة Details في Google Sheets'
+                    : 'Sync Google Sheets (Details Tab)'
+                }
+                aria-label="Google Sheets Details Sync"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-[#00E676] shrink-0" />
+                <span className="hidden 2xl:inline">Google </span>
+                <span>Sheets</span>
+              </button>
+            )}
 
           {/* Admin / Management / Tech Support: Direct Send Notification Button */}
           {(currentUser?.role === 'super_admin' ||
@@ -301,14 +326,14 @@ export const Navbar: React.FC<NavbarProps> = ({
               <button
                 type="button"
                 onClick={onOpenSendNotification}
-                className="px-3 py-2 bg-[#004B87] hover:bg-[#00386B] text-white border border-[#0062B0] rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all duration-200 hover:-translate-y-0.5 active:scale-95 whitespace-nowrap"
+                className="px-2.5 py-2 bg-[#004B87] hover:bg-[#00386B] text-white border border-[#0062B0] rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all duration-200 hover:-translate-y-0.5 active:scale-95 whitespace-nowrap"
                 title={
                   language === 'ar'
                     ? 'إرسال ومتابعة الإشعارات الموجهة للموظفين'
                     : 'Send & Track Staff Notices'
                 }
               >
-                <Send className="w-3.5 h-3.5 text-[#00E676]" />
+                <Send className="w-3.5 h-3.5 text-[#00E676] shrink-0" />
                 <span>{language === 'ar' ? 'إرسال إشعار' : 'Send Notice'}</span>
               </button>
             )}
@@ -584,7 +609,7 @@ export const Navbar: React.FC<NavbarProps> = ({
       {/* MOBILE & TABLET VIEW (lg:hidden) - Clean Responsive Single-Row Header     */}
       {/* ========================================================================= */}
       <div className="lg:hidden flex items-center justify-between gap-2 px-3 py-2">
-        <div className="flex items-center gap-2 min-w-0 flex-1">
+        <div className="flex items-center gap-2 min-w-0 shrink-0">
           {onToggleMobileMenu && (
             <button
               onClick={onToggleMobileMenu}
@@ -595,7 +620,16 @@ export const Navbar: React.FC<NavbarProps> = ({
               <Menu className="w-5 h-5 text-[#00E676]" />
             </button>
           )}
-          <div className="min-w-0 truncate">
+          <div className="shrink-0 sm:hidden">
+            <CrmLogo
+              size={34}
+              showText={false}
+              lightMode={true}
+              title={t('appTitle')}
+              subtitle={t('appSub')}
+            />
+          </div>
+          <div className="hidden sm:block min-w-0 truncate">
             <CrmLogo
               size={34}
               showText={true}
@@ -607,7 +641,9 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
 
         <div className="flex items-center gap-1.5 shrink-0">
-          <PWAInstallButton variant="navbar" />
+          <div className="hidden sm:block">
+            <PWAInstallButton variant="navbar" />
+          </div>
 
           {onOpenSmartSearch && (
             <button
@@ -619,6 +655,25 @@ export const Navbar: React.FC<NavbarProps> = ({
               <Search className="w-4 h-4" />
             </button>
           )}
+
+          {(currentUser?.role === 'super_admin' ||
+            currentUser?.role === 'management' ||
+            currentUser?.role === 'technical_support') &&
+            onOpenSheetsSync && (
+              <button
+                type="button"
+                onClick={onOpenSheetsSync}
+                className="p-2 min-w-[40px] min-h-[40px] flex items-center justify-center rounded-xl bg-[#003366] hover:bg-[#004080] text-[#00E676] border border-[#004B87] transition-all active:scale-95"
+                title={
+                  language === 'ar'
+                    ? 'مزامنة ورقة Details في Google Sheets'
+                    : 'Sync Google Sheets (Details Tab)'
+                }
+                aria-label="Google Sheets Details Sync"
+              >
+                <FileSpreadsheet className="w-4 h-4" />
+              </button>
+            )}
 
           {(currentUser?.role === 'super_admin' ||
             currentUser?.role === 'management' ||
@@ -879,7 +934,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           <button
             type="button"
             onClick={handleToggleSound}
-            className={`p-2 min-w-[40px] min-h-[40px] flex items-center justify-center rounded-xl border active:scale-95 ${
+            className={`hidden sm:flex p-2 min-w-[40px] min-h-[40px] items-center justify-center rounded-xl border active:scale-95 ${
               soundEnabled
                 ? 'bg-[#003366] text-[#00E676] border-[#004B87]'
                 : 'bg-rose-950/60 text-rose-300 border-rose-700'
@@ -892,7 +947,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           <button
             onClick={toggleTheme}
-            className="p-2 min-w-[40px] min-h-[40px] flex items-center justify-center rounded-xl bg-[#003366] text-amber-300 border border-[#004B87] active:scale-95"
+            className="hidden sm:flex p-2 min-w-[40px] min-h-[40px] items-center justify-center rounded-xl bg-[#003366] text-amber-300 border border-[#004B87] active:scale-95"
             title={isDark ? t('themeLight') : t('themeDark')}
           >
             {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}

@@ -129,7 +129,7 @@ export const AiInsightsPage: React.FC<AiInsightsPageProps> = ({
     [activeCallAgents, focusAgentUsername]
   );
 
-  // Per-agent quantitative metrics computed directly from real Firestore cases
+  // Per-agent quantitative metrics computed directly from real database cases
   const agentMetricsList = useMemo<AgentMetricsPayload[]>(() => {
     const nowMs = Date.now();
 

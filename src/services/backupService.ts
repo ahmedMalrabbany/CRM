@@ -17,13 +17,14 @@ import {
   runTransaction,
   writeBatch,
 } from '../lib/sheetsDb';
-import { db, handleFirestoreError, OperationType } from '../config/firebase';
+import { db, handleDatabaseError, OperationType } from '../config/sheetsConfig';
 import {
   DatabaseBackup,
   User,
   BackupScheduleConfig,
 } from '../types';
 import { logAuditEvent } from './auditService';
+import { extractMaxCaseSequence } from '../utils/analyticsUtils';
 
 const BACKUPS_COLLECTION = 'backups';
 const SETTINGS_COLLECTION = 'settings';
@@ -138,7 +139,7 @@ export async function fetchBackupSchedule(): Promise<BackupScheduleConfig> {
       ...data,
     };
   } catch (error) {
-    handleFirestoreError(error, OperationType.GET, `${SETTINGS_COLLECTION}/${BACKUP_SCHEDULE_DOC_ID}`);
+    handleDatabaseError(error, OperationType.GET, `${SETTINGS_COLLECTION}/${BACKUP_SCHEDULE_DOC_ID}`);
   }
 }
 
@@ -194,7 +195,7 @@ export async function saveBackupSchedule(
       updatedBy: actingUser.fullName,
     };
 
-    // Strip undefined values before writing to Firestore
+    // Strip undefined values before saving
     const cleanPayload = Object.fromEntries(
       Object.entries(normalized).filter(([, v]) => v !== undefined)
     );
@@ -224,7 +225,7 @@ export async function saveBackupSchedule(
 
     return normalized;
   } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, `${SETTINGS_COLLECTION}/${BACKUP_SCHEDULE_DOC_ID}`);
+    handleDatabaseError(error, OperationType.WRITE, `${SETTINGS_COLLECTION}/${BACKUP_SCHEDULE_DOC_ID}`);
   }
 }
 
@@ -332,7 +333,7 @@ export async function createDatabaseBackup(
 
     return backupRecord;
   } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, BACKUPS_COLLECTION);
+    handleDatabaseError(error, OperationType.WRITE, BACKUPS_COLLECTION);
   }
 }
 
@@ -459,7 +460,7 @@ export async function fetchBackups(): Promise<DatabaseBackup[]> {
     });
     return list;
   } catch (error) {
-    handleFirestoreError(error, OperationType.LIST, BACKUPS_COLLECTION);
+    handleDatabaseError(error, OperationType.LIST, BACKUPS_COLLECTION);
   }
 }
 
@@ -486,6 +487,27 @@ export function subscribeToBackups(
   );
 }
 
+async function writeRecordsChunked(
+  collectionName: string,
+  records: any[],
+  chunkSize = 400
+): Promise<number> {
+  let count = 0;
+  for (let i = 0; i < records.length; i += chunkSize) {
+    const chunk = records.slice(i, i + chunkSize);
+    const batch = writeBatch(db);
+    for (const item of chunk) {
+      if (!item || !item.id) continue;
+      const itemRef = doc(db, collectionName, item.id);
+      const { id, ...data } = item;
+      batch.set(itemRef, data);
+      count++;
+    }
+    await batch.commit();
+  }
+  return count;
+}
+
 export async function restoreDatabaseBackup(
   backupId: string,
   actingUser: User
@@ -500,40 +522,32 @@ export async function restoreDatabaseBackup(
 
     let restoredCount = 0;
 
-    // Restore taxpayers
     if (payload.taxpayers && Array.isArray(payload.taxpayers)) {
-      const batch = writeBatch(db);
-      for (const t of payload.taxpayers) {
-        const tRef = doc(db, 'taxpayers', t.id);
-        const { id, ...data } = t;
-        batch.set(tRef, data);
-        restoredCount++;
-      }
-      await batch.commit();
+      restoredCount += await writeRecordsChunked('taxpayers', payload.taxpayers);
     }
 
-    // Restore callers
     if (payload.callers && Array.isArray(payload.callers)) {
-      const batch = writeBatch(db);
-      for (const c of payload.callers) {
-        const cRef = doc(db, 'callers', c.id);
-        const { id, ...data } = c;
-        batch.set(cRef, data);
-        restoredCount++;
-      }
-      await batch.commit();
+      restoredCount += await writeRecordsChunked('callers', payload.callers);
     }
 
-    // Restore cases
     if (payload.cases && Array.isArray(payload.cases)) {
-      const batch = writeBatch(db);
-      for (const cs of payload.cases) {
-        const csRef = doc(db, 'cases', cs.id);
-        const { id, ...data } = cs;
-        batch.set(csRef, data);
-        restoredCount++;
+      restoredCount += await writeRecordsChunked('cases', payload.cases);
+
+      // Synchronize cases atomic sequence counter so future cases never collide
+      const maxSeq = extractMaxCaseSequence(payload.cases);
+      if (maxSeq > 0) {
+        const counterRef = doc(db, 'counters', 'cases');
+        const counterSnap = await getDoc(counterRef);
+        const existingSeq = counterSnap.exists()
+          ? Number(counterSnap.data()?.currentValue) || 0
+          : 0;
+        if (maxSeq > existingSeq) {
+          await setDoc(counterRef, {
+            currentValue: maxSeq,
+            lastUpdated: new Date().toISOString(),
+          });
+        }
       }
-      await batch.commit();
     }
 
     await logAuditEvent({
@@ -548,6 +562,6 @@ export async function restoreDatabaseBackup(
 
     return { restoredRecords: restoredCount };
   } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, 'restore');
+    handleDatabaseError(error, OperationType.WRITE, 'restore');
   }
 }

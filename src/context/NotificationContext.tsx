@@ -5,7 +5,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { collection, query, where, onSnapshot, doc, updateDoc, writeBatch } from '../lib/sheetsDb';
-import { db } from '../config/firebase';
+import { db } from '../config/sheetsConfig';
 import { NotificationItem } from '../types';
 import { useAuth } from './AuthContext';
 import { playAlertSound } from '../utils/soundAlerts';
@@ -64,7 +64,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
     const targets = Array.from(new Set(rawTargets)).slice(0, 10);
 
-    // Query without orderBy to avoid Firestore composite index requirement, then sort newest-first in JS
+    // Query without orderBy, then sort newest-first in JS
     const q = query(
       collection(db, 'notifications'),
       where('recipientUsername', 'in', targets)

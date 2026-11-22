@@ -214,7 +214,7 @@ export function runQuery(
   const lim = constraints.find((c): c is Extract<Constraint, { type: 'limit' }> => c.type === 'limit');
 
   for (const w of wheres) out = out.filter((d) => matches(d.rec.data, w));
-  // Firestore excludes docs that lack an orderBy field
+  // Exclude docs that lack an orderBy field
   for (const o of orders) out = out.filter((d) => getByPath(d.rec.data, o.field) !== undefined);
 
   const sorted = [...out].sort((a, b) => {

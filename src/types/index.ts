@@ -101,7 +101,7 @@ export interface CaseAttachment {
 }
 
 export interface Case {
-  id: string; // Firestore document ID
+  id: string; // Database record ID
   caseId: string; // CRM-000001
   callType: CallType;
   taxType: TaxType;

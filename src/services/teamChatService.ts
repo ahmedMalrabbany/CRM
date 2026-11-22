@@ -17,7 +17,7 @@ import {
   writeBatch,
   arrayUnion,
 } from '../lib/sheetsDb';
-import { db, handleFirestoreError, OperationType } from '../config/firebase';
+import { db, handleDatabaseError, OperationType } from '../config/sheetsConfig';
 import { ChatAttachment, TeamChatControl, TeamChatMessage, User } from '../types';
 import { normalizeUserRole } from './userService';
 import { logAuditEvent } from './auditService';
@@ -116,7 +116,7 @@ export async function pauseTeamChat(params: {
         : `تم إيقاف الشات إيقافاً مفتوحاً حتى إعادة التفعيل — السبب: ${payload.pauseReason}`,
     });
   } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, CHAT_CONTROL_DOC_PATH);
+    handleDatabaseError(error, OperationType.WRITE, CHAT_CONTROL_DOC_PATH);
   }
 }
 
@@ -147,7 +147,7 @@ export async function resumeTeamChat(actingUser: User): Promise<void> {
       details: 'تم رفع الإيقاف وإعادة تفعيل شات التواصل السريع للجميع',
     });
   } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, CHAT_CONTROL_DOC_PATH);
+    handleDatabaseError(error, OperationType.WRITE, CHAT_CONTROL_DOC_PATH);
   }
 }
 
@@ -176,7 +176,7 @@ export function subscribeToTeamChatMessages(
       callback(items);
     },
     (error) => {
-      handleFirestoreError(error, OperationType.LIST, TEAM_CHAT_COLLECTION);
+      handleDatabaseError(error, OperationType.LIST, TEAM_CHAT_COLLECTION);
     }
   );
 }
@@ -272,7 +272,7 @@ export async function sendTeamChatMessage(params: {
 
     await addDoc(collection(db, TEAM_CHAT_COLLECTION), payload);
   } catch (error) {
-    handleFirestoreError(error, OperationType.CREATE, TEAM_CHAT_COLLECTION);
+    handleDatabaseError(error, OperationType.CREATE, TEAM_CHAT_COLLECTION);
   }
 }
 
@@ -289,7 +289,7 @@ export async function deleteTeamChatMessage(messageId: string): Promise<void> {
       );
     }
   } catch (error) {
-    handleFirestoreError(error, OperationType.DELETE, `${TEAM_CHAT_COLLECTION}/${messageId}`);
+    handleDatabaseError(error, OperationType.DELETE, `${TEAM_CHAT_COLLECTION}/${messageId}`);
   }
 }
 
@@ -326,7 +326,7 @@ export async function clearPublicTeamChatMessages(actingUser: User): Promise<num
 
     return refsToDelete.length;
   } catch (error) {
-    handleFirestoreError(error, OperationType.DELETE, TEAM_CHAT_COLLECTION);
+    handleDatabaseError(error, OperationType.DELETE, TEAM_CHAT_COLLECTION);
   }
 }
 
@@ -374,7 +374,7 @@ export async function clearDmTeamChatMessages(
 
     return refsToDelete.length;
   } catch (error) {
-    handleFirestoreError(error, OperationType.DELETE, TEAM_CHAT_COLLECTION);
+    handleDatabaseError(error, OperationType.DELETE, TEAM_CHAT_COLLECTION);
   }
 }
 
@@ -410,7 +410,7 @@ export async function clearAllTeamChatMessages(actingUser: User): Promise<number
 
     return refsToDelete.length;
   } catch (error) {
-    handleFirestoreError(error, OperationType.DELETE, TEAM_CHAT_COLLECTION);
+    handleDatabaseError(error, OperationType.DELETE, TEAM_CHAT_COLLECTION);
   }
 }
 

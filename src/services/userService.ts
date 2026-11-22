@@ -16,7 +16,7 @@ import {
   onSnapshot,
   writeBatch
 } from '../lib/sheetsDb';
-import { db, handleFirestoreError, OperationType } from '../config/firebase';
+import { db, handleDatabaseError, OperationType } from '../config/sheetsConfig';
 import { User, UserRole, ImportReport } from '../types';
 import { INITIAL_USERS_DATA } from '../data/initialUsers';
 import { hashPassword, generateSalt } from '../utils/crypto';
@@ -119,9 +119,9 @@ export function deduplicateUsers(users: User[]): User[] {
 }
 
 /**
- * Removes duplicate user documents in Firestore (keeps the earliest/active canonical doc)
+ * Removes duplicate user documents in the database (keeps the earliest/active canonical doc)
  */
-export async function cleanupDuplicateUsersInFirestore(): Promise<number> {
+export async function cleanupDuplicateUsers(): Promise<number> {
   try {
     const snapshot = await getDocs(collection(db, USERS_COLLECTION));
     const seenByUsername = new Map<string, { id: string; user: User }>();
@@ -181,8 +181,8 @@ export async function initializeUsersDatabase(): Promise<{ count: number; initia
 
   initUsersPromise = (async () => {
     try {
-      // Remove any existing duplicate docs in Firestore first
-      await cleanupDuplicateUsersInFirestore();
+      // Remove any existing duplicate docs first
+      await cleanupDuplicateUsers();
 
       const snapshot = await getDocs(collection(db, USERS_COLLECTION));
       const existingUsernames = new Set<string>();
@@ -203,7 +203,7 @@ export async function initializeUsersDatabase(): Promise<{ count: number; initia
         return { count: snapshot.size, initialized: false };
       }
 
-      console.log(`Seeding/syncing ${missingUsers.length} users into Firestore...`);
+      console.log(`Seeding/syncing ${missingUsers.length} users into Sheets DB...`);
       let count = 0;
       const batch = writeBatch(db);
 
@@ -251,7 +251,7 @@ export async function initializeUsersDatabase(): Promise<{ count: number; initia
 
       return { count, initialized: count > 0 };
     } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, USERS_COLLECTION);
+      handleDatabaseError(error, OperationType.WRITE, USERS_COLLECTION);
     } finally {
       initUsersPromise = null;
     }
@@ -273,7 +273,7 @@ export function subscribeToUsers(callback: (users: User[]) => void): () => void 
       callback(deduplicateUsers(users));
     },
     (error) => {
-      handleFirestoreError(error, OperationType.LIST, USERS_COLLECTION);
+      handleDatabaseError(error, OperationType.LIST, USERS_COLLECTION);
     }
   );
 }
@@ -305,7 +305,7 @@ export async function getUserByUsername(username: string): Promise<User | null> 
       return { id: firstDoc.id, ...(firstDoc.data() as Omit<User, 'id'>) };
     }
 
-    // 3. Case-insensitive scan across all Firestore users (handles newly created users regardless of casing)
+    // 3. Case-insensitive scan across all database users (handles newly created users regardless of casing)
     const cleanLower = clean.toLowerCase();
     const allSnap = await getDocs(collection(db, USERS_COLLECTION));
     for (const d of allSnap.docs) {
@@ -352,7 +352,7 @@ export async function getUserByUsername(username: string): Promise<User | null> 
 
     return null;
   } catch (error) {
-    handleFirestoreError(error, OperationType.GET, USERS_COLLECTION);
+    handleDatabaseError(error, OperationType.GET, USERS_COLLECTION);
     return null;
   }
 }
@@ -392,7 +392,7 @@ export async function lookupEmployeeInfo(
 }
 
 /**
- * Checks Firestore for duplicate username, crmUser, or fullName
+ * Checks database for duplicate username, crmUser, or fullName
  */
 async function assertNoDuplicateUser(
   params: { username?: string; crmUser?: string; fullName?: string },
@@ -484,7 +484,7 @@ export async function createUser(
 
     await setDoc(userRef, newUser);
 
-    // Verify persistence in Firestore immediately
+    // Verify persistence immediately
     const verifiedSnap = await getDoc(userRef);
     if (!verifiedSnap.exists()) {
       throw new Error('تعذر التحقق من حفظ المستخدم في قاعدة البيانات، يرجى المحاولة مرة أخرى.');
@@ -573,7 +573,7 @@ export async function updateUser(
     if (error instanceof Error && error.message.includes('مسجل مسبقاً')) {
       throw error;
     }
-    handleFirestoreError(error, OperationType.UPDATE, `${USERS_COLLECTION}/${userId}`);
+    handleDatabaseError(error, OperationType.UPDATE, `${USERS_COLLECTION}/${userId}`);
   }
 }
 
@@ -603,7 +603,7 @@ export async function resetUserPassword(
       details: 'تم تغيير كلمة المرور للمستخدم بنجاح',
     });
   } catch (error) {
-    handleFirestoreError(error, OperationType.UPDATE, `${USERS_COLLECTION}/${userId}`);
+    handleDatabaseError(error, OperationType.UPDATE, `${USERS_COLLECTION}/${userId}`);
   }
 }
 
@@ -634,7 +634,7 @@ export async function deleteUser(userId: string, actingUser: User): Promise<void
       details: `تم حذف حساب ${targetUser?.fullName || userId}`,
     });
   } catch (error) {
-    handleFirestoreError(error, OperationType.DELETE, `${USERS_COLLECTION}/${userId}`);
+    handleDatabaseError(error, OperationType.DELETE, `${USERS_COLLECTION}/${userId}`);
   }
 }
 
@@ -811,7 +811,7 @@ export async function fetchUsers(): Promise<User[]> {
     users.sort((a, b) => a.fullName.localeCompare(b.fullName, 'ar'));
     return deduplicateUsers(users);
   } catch (error) {
-    handleFirestoreError(error, OperationType.LIST, USERS_COLLECTION);
+    handleDatabaseError(error, OperationType.LIST, USERS_COLLECTION);
     return [];
   }
 }

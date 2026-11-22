@@ -48,9 +48,11 @@ export const MyCasesPage: React.FC<MyCasesPageProps> = ({
   const [activeTab, setActiveTab] = useState<'assigned' | 'created'>('assigned');
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Multi-select & unified bulk reply strictly for Management and Technical Support
+  // Multi-select & unified bulk reply strictly for Management, Technical Support, and Super Admin
   const canBulkReply =
-    currentUser.role === 'management' || currentUser.role === 'technical_support';
+    currentUser.role === 'management' ||
+    currentUser.role === 'technical_support' ||
+    currentUser.role === 'super_admin';
 
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);

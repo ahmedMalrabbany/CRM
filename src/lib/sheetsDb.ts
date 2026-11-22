@@ -1,13 +1,13 @@
 /**
- * Drop-in replacement for the subset of `firebase/firestore` used by this app.
+ * Sheets-backed document/collection client SDK for this CRM.
  * Talks to the app server (/api/db/*), which keeps data in memory and syncs it
- * to Google Sheets in the background.  Realtime updates use Server-Sent Events.
+ * to Google Sheets in the background. Realtime updates use Server-Sent Events.
  */
 
 /* ------------------------------------------------------------------ types */
 
-export interface Firestore { readonly __sheetsDb: true }
-export const db: Firestore = { __sheetsDb: true };
+export interface SheetsDatabase { readonly __sheetsDb: true }
+export const db: SheetsDatabase = { __sheetsDb: true };
 
 export interface DocumentReference { readonly type: 'doc'; readonly path: string; readonly id: string }
 export interface CollectionReference { readonly type: 'collection'; readonly path: string; readonly id: string }
@@ -46,13 +46,13 @@ function joinSegments(segs: string[]): string[] {
   return segs.flatMap((s) => String(s).split('/')).filter(Boolean);
 }
 
-export function collection(_db: Firestore, path: string, ...rest: string[]): CollectionReference {
+export function collection(_db: SheetsDatabase, path: string, ...rest: string[]): CollectionReference {
   const segs = joinSegments([path, ...rest]);
   if (segs.length % 2 !== 1) throw new Error(`Invalid collection path: ${segs.join('/')}`);
   return { type: 'collection', path: segs.join('/'), id: segs[segs.length - 1] };
 }
 
-export function doc(parent: Firestore | CollectionReference, path?: string, ...rest: string[]): DocumentReference {
+export function doc(parent: SheetsDatabase | CollectionReference, path?: string, ...rest: string[]): DocumentReference {
   let segs: string[];
   if ((parent as any).type === 'collection') {
     segs = joinSegments([(parent as CollectionReference).path, ...(path ? [path, ...rest] : [autoId()])]);
@@ -104,7 +104,7 @@ async function rpc(body: any): Promise<any> {
   return json;
 }
 
-/** Drop undefined (Firestore would reject it; JSON would silently drop it anyway). */
+/** Drop undefined values before serialization. */
 function clean<T>(x: T): T {
   return x === undefined ? x : JSON.parse(JSON.stringify(x));
 }
@@ -164,7 +164,7 @@ export interface WriteBatch {
   delete(ref: DocumentReference): WriteBatch;
   commit(): Promise<void>;
 }
-export function writeBatch(_db: Firestore): WriteBatch {
+export function writeBatch(_db: SheetsDatabase): WriteBatch {
   const ops: WriteOp[] = [];
   const b: WriteBatch = {
     set(ref, data, options) { ops.push({ op: 'set', path: ref.path, data: clean(data), merge: !!options?.merge }); return b; },
@@ -189,7 +189,7 @@ export interface Transaction {
 
 /** Optimistic transaction: reads record doc versions, commit fails (and retries) if any changed. */
 export async function runTransaction<T>(
-  _db: Firestore,
+  _db: SheetsDatabase,
   fn: (tx: Transaction) => Promise<T>,
   maxAttempts = 6
 ): Promise<T> {
@@ -272,7 +272,7 @@ export function onSnapshot(
   let again = false;
   let lastRun = 0;
   let timer: ReturnType<typeof setTimeout> | null = null;
-  let lastHash = '';
+  let lastHash: string | null = null;
 
   const run = async () => {
     if (closed) return;

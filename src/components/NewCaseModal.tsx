@@ -54,7 +54,7 @@ import { AddCallerModal } from './AddCallerModal';
 import { PendingAttachmentsPicker, QueuedAttachmentFile } from './CaseAttachmentsSection';
 import { StyledTextarea } from './StyledTextarea';
 import { collection, getDocs, limit, orderBy, query, where } from '../lib/sheetsDb';
-import { db } from '../config/firebase';
+import { db } from '../config/sheetsConfig';
 
 interface NewCaseModalProps {
   isOpen: boolean;
@@ -211,8 +211,9 @@ export const NewCaseModal: React.FC<NewCaseModalProps> = ({
     return () => clearInterval(timer);
   }, []);
 
-  // Fetch previous case titles on load for autocomplete
+  // Fetch previous case titles whenever modal opens for fresh autocomplete
   useEffect(() => {
+    if (!isOpen) return;
     const fetchPreviousTitles = async () => {
       try {
         const qCases = query(collection(db, 'cases'), orderBy('createdAt', 'desc'), limit(150));
@@ -234,7 +235,7 @@ export const NewCaseModal: React.FC<NewCaseModalProps> = ({
       }
     };
     fetchPreviousTitles();
-  }, []);
+  }, [isOpen]);
 
   // Reset service when tax type changes if current selection isn't valid for new tax type
   useEffect(() => {
@@ -633,24 +634,24 @@ export const NewCaseModal: React.FC<NewCaseModalProps> = ({
         {/* Form Body */}
         <form ref={formRef} onSubmit={handleSubmit} className="p-5 overflow-y-auto flex-1 flex flex-col gap-4 text-xs">
           {errorMessage && (
-            <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-900 font-semibold flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600" />
+            <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-xl text-rose-900 dark:text-rose-200 font-semibold flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600 dark:text-rose-400" />
               <span>{errorMessage}</span>
             </div>
           )}
 
           {/* Duplicates Alert */}
           {duplicateCases.length > 0 && (
-            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-900">
+            <div className="p-3 bg-amber-50 dark:bg-amber-950/35 border border-amber-200 dark:border-amber-700/70 rounded-xl text-amber-900 dark:text-amber-100">
               <div className="flex items-center gap-1.5 font-bold mb-1">
-                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
                 <span>تنبيه: توجد حالات مسجلة لنفس رقم التسجيل الضريبي ({duplicateCases.length})</span>
               </div>
-              <div className="text-[11px] text-amber-800 space-y-1">
+              <div className="text-[11px] text-amber-800 dark:text-amber-200 space-y-1">
                 {duplicateCases.map((dc) => (
-                  <div key={dc.id} className="flex justify-between border-b border-amber-200/60 pb-1">
+                  <div key={dc.id} className="flex justify-between border-b border-amber-200/60 dark:border-amber-700/40 pb-1">
                     <span className="font-bold">{dc.caseId}: {dc.title}</span>
-                    <span className="bg-amber-200/80 px-1.5 py-0.5 rounded text-[10px]">{dc.status}</span>
+                    <span className="bg-amber-200/80 dark:bg-amber-800/70 dark:text-amber-100 px-1.5 py-0.5 rounded text-[10px]">{dc.status}</span>
                   </div>
                 ))}
               </div>
@@ -658,20 +659,20 @@ export const NewCaseModal: React.FC<NewCaseModalProps> = ({
           )}
 
           {/* Section 1: Call Type (نوع الاتصال) */}
-          <div className="bg-slate-50/80 p-3.5 rounded-xl border border-slate-200">
-            <h3 className="font-bold text-slate-800 mb-2 flex items-center gap-1.5 text-sm">
-              <FileText className="w-4 h-4 text-blue-700" />
+          <div className="bg-slate-50/80 dark:bg-[#071629] p-3.5 rounded-xl border border-slate-200 dark:border-[#00386B]">
+            <h3 className="font-bold text-slate-800 dark:text-white mb-2 flex items-center gap-1.5 text-sm">
+              <FileText className="w-4 h-4 text-blue-700 dark:text-[#00E676]" />
               1. نوع الاتصال (Call Type)
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="font-bold text-slate-700 block mb-1">
+                <label className="font-bold text-slate-700 dark:text-slate-200 block mb-1">
                   تحديد نوع الاتصال * (من القائمة المنسدلة)
                 </label>
                 <select
                   value={callType}
                   onChange={(e) => setCallType(e.target.value as CallType)}
-                  className="w-full p-2.5 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 font-bold text-slate-900 text-xs shadow-2xs"
+                  className="w-full p-2.5 bg-white dark:bg-[#0B1D35] border border-slate-300 dark:border-[#004B87] rounded-xl focus:ring-2 focus:ring-blue-500 font-bold text-slate-900 dark:text-white text-xs shadow-2xs"
                 >
                   <option value="طلب">طلب</option>
                   <option value="استفسار">استفسار</option>
@@ -681,11 +682,11 @@ export const NewCaseModal: React.FC<NewCaseModalProps> = ({
               </div>
 
               <div>
-                <label className="font-bold text-slate-700 block mb-1">درجة الأولوية</label>
+                <label className="font-bold text-slate-700 dark:text-slate-200 block mb-1">درجة الأولوية</label>
                 <select
                   value={priority}
                   onChange={(e) => setPriority(e.target.value as CasePriority)}
-                  className="w-full p-2.5 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 font-semibold text-slate-900 text-xs shadow-2xs"
+                  className="w-full p-2.5 bg-white dark:bg-[#0B1D35] border border-slate-300 dark:border-[#004B87] rounded-xl focus:ring-2 focus:ring-blue-500 font-semibold text-slate-900 dark:text-white text-xs shadow-2xs"
                 >
                   <option value="عادي">عادي</option>
                   <option value="هام">هام</option>
@@ -696,14 +697,14 @@ export const NewCaseModal: React.FC<NewCaseModalProps> = ({
           </div>
 
           {/* Section 2: Tax Registration Number & Taxpayer Name */}
-          <div className="bg-slate-50/80 p-3.5 rounded-xl border border-slate-200">
+          <div className="bg-slate-50/80 dark:bg-[#071629] p-3.5 rounded-xl border border-slate-200 dark:border-[#00386B]">
             <div className="flex items-center justify-between mb-2">
-              <h3 className="font-bold text-slate-800 flex items-center gap-1.5 text-sm">
-                <Building className="w-4 h-4 text-blue-700" />
+              <h3 className="font-bold text-slate-800 dark:text-white flex items-center gap-1.5 text-sm">
+                <Building className="w-4 h-4 text-blue-700 dark:text-[#00E676]" />
                 2. بيانات الممول والشركة (Taxpayer Info)
               </h3>
               {(existingTaxpayer || taxpayerFromPastCase) && (
-                <span className="text-[11px] font-bold text-emerald-700 bg-emerald-100/90 border border-emerald-300 px-2 py-0.5 rounded-full flex items-center gap-1 animate-in fade-in">
+                <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-200 bg-emerald-100/90 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-700 px-2 py-0.5 rounded-full flex items-center gap-1 animate-in fade-in">
                   <CheckCircle2 className="w-3.5 h-3.5" />
                   تم استرجاع اسم الممول تلقائياً من السجلات السابقة
                 </span>
@@ -713,10 +714,10 @@ export const NewCaseModal: React.FC<NewCaseModalProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="font-bold text-slate-700">
+                  <label className="font-bold text-slate-700 dark:text-slate-200">
                     رقم التسجيل الضريبي المكون من 9 أرقام
                   </label>
-                  <span className="text-[10px] text-slate-500 font-bold bg-slate-200/80 px-2 py-0.5 rounded-md">
+                  <span className="text-[10px] text-slate-500 dark:text-slate-300 font-bold bg-slate-200/80 dark:bg-[#0B1D35] px-2 py-0.5 rounded-md">
                     اختياري
                   </span>
                 </div>
@@ -730,7 +731,7 @@ export const NewCaseModal: React.FC<NewCaseModalProps> = ({
                       setTaxRegistrationNumber(val);
                     }}
                     placeholder="أدخل 9 أرقام (مثال: 123456789)..."
-                    className="w-full p-2.5 pl-9 font-mono text-sm bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 font-bold text-slate-900 shadow-2xs"
+                    className="w-full p-2.5 pl-9 font-mono text-sm bg-white dark:bg-[#0B1D35] border border-slate-300 dark:border-[#004B87] rounded-xl focus:ring-2 focus:ring-blue-500 font-bold text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 shadow-2xs"
                   />
                   <div className="absolute left-2.5 top-3 text-slate-400">
                     {isSearchingTaxpayer ? (
@@ -742,22 +743,22 @@ export const NewCaseModal: React.FC<NewCaseModalProps> = ({
                     )}
                   </div>
                 </div>
-                <p className="text-[10px] text-slate-500 mt-1">
+                <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">
                   * في حال كان الرقم مسجلاً في حالة سابقة، سيظهر اسم الممول/الشركة تلقائياً.
                 </p>
               </div>
 
               <div>
-                <label className="font-bold text-slate-700 block mb-1">اسم الممول أو الشركة</label>
+                <label className="font-bold text-slate-700 dark:text-slate-200 block mb-1">اسم الممول أو الشركة</label>
                 <input
                   type="text"
                   value={taxpayerName}
                   onChange={(e) => setTaxpayerName(e.target.value)}
                   placeholder="اسم الممول أو الكيان التجاري..."
-                  className="w-full p-2.5 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 font-bold text-slate-900 text-xs shadow-2xs"
+                  className="w-full p-2.5 bg-white dark:bg-[#0B1D35] border border-slate-300 dark:border-[#004B87] rounded-xl focus:ring-2 focus:ring-blue-500 font-bold text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 text-xs shadow-2xs"
                 />
                 {taxpayerName && (
-                  <span className="text-[10px] text-slate-500 mt-1 block">
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 mt-1 block">
                     يمكن تعديل الاسم أو اعتماده كما هو للحالة.
                   </span>
                 )}
@@ -766,10 +767,10 @@ export const NewCaseModal: React.FC<NewCaseModalProps> = ({
           </div>
 
           {/* Section 3: Caller Info & Add Button */}
-          <div className="bg-slate-50/80 p-3.5 rounded-xl border border-slate-200">
+          <div className="bg-slate-50/80 dark:bg-[#071629] p-3.5 rounded-xl border border-slate-200 dark:border-[#00386B]">
             <div className="flex items-center justify-between mb-2">
-              <h3 className="font-bold text-slate-800 flex items-center gap-1.5 text-sm">
-                <Phone className="w-4 h-4 text-blue-700" />
+              <h3 className="font-bold text-slate-800 dark:text-white flex items-center gap-1.5 text-sm">
+                <Phone className="w-4 h-4 text-blue-700 dark:text-[#00E676]" />
                 3. بيانات المتصل (Caller Details)
               </h3>
               <button
@@ -785,7 +786,7 @@ export const NewCaseModal: React.FC<NewCaseModalProps> = ({
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="font-bold text-slate-700 block mb-1">رقم تليفون المتصل *</label>
+                <label className="font-bold text-slate-700 dark:text-slate-200 block mb-1">رقم تليفون المتصل *</label>
                 <div className="relative">
                   <input
                     type="text"
@@ -797,7 +798,7 @@ export const NewCaseModal: React.FC<NewCaseModalProps> = ({
                       setCallerPhone(normalizeAsciiDigits(e.target.value).replace(/\D/g, ''))
                     }
                     placeholder="أدخل رقم تليفون المتصل..."
-                    className="w-full p-2.5 pl-8 font-mono font-bold bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 text-slate-900 text-xs shadow-2xs text-left"
+                    className="w-full p-2.5 pl-8 font-mono font-bold bg-white dark:bg-[#0B1D35] border border-slate-300 dark:border-[#004B87] rounded-xl focus:ring-2 focus:ring-blue-500 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 text-xs shadow-2xs text-left"
                   />
                   <div className="absolute left-2.5 top-3 text-slate-400">
                     {isSearchingCaller && (
@@ -808,21 +809,21 @@ export const NewCaseModal: React.FC<NewCaseModalProps> = ({
 
                 {/* Status indicator */}
                 {existingCaller || callerFromPastCase ? (
-                  <span className="text-[11px] text-emerald-700 font-bold flex items-center gap-1 mt-1.5 animate-in fade-in">
+                  <span className="text-[11px] text-emerald-700 dark:text-emerald-300 font-bold flex items-center gap-1 mt-1.5 animate-in fade-in">
                     <CheckCircle2 className="w-3.5 h-3.5" />
                     بيانات المتصل مسجلة مسبقاً (تم الاستدعاء التلقائي)
                   </span>
                 ) : (
                   callerPhone.length >= 3 && (
-                    <div className="mt-1.5 flex items-center justify-between text-[11px] text-blue-900 bg-blue-50 border border-blue-200 p-1.5 rounded-lg">
+                    <div className="mt-1.5 flex items-center justify-between text-[11px] text-blue-900 dark:text-sky-200 bg-blue-50 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-800 p-1.5 rounded-lg">
                       <span className="flex items-center gap-1 font-semibold">
-                        <Info className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                        <Info className="w-3.5 h-3.5 text-blue-600 dark:text-sky-400 shrink-0" />
                         اتصال لأول مرة بهذا الرقم
                       </span>
                       <button
                         type="button"
                         onClick={() => setIsAddCallerModalOpen(true)}
-                        className="text-blue-700 hover:text-blue-900 font-bold underline cursor-pointer"
+                        className="text-blue-700 dark:text-sky-300 hover:text-blue-900 dark:hover:text-white font-bold underline cursor-pointer"
                       >
                         انقر لإضافة البيانات
                       </button>
@@ -833,9 +834,9 @@ export const NewCaseModal: React.FC<NewCaseModalProps> = ({
 
               <div>
                 <div className="flex items-center justify-between mb-1 gap-1">
-                  <label className="font-bold text-slate-700">اسم المتصل *</label>
+                  <label className="font-bold text-slate-700 dark:text-slate-200">اسم المتصل *</label>
                   {phoneCallerMatches.length > 0 && (
-                    <span className="text-[10px] font-bold text-[#004B87] bg-blue-100/90 px-2 py-0.5 rounded-md">
+                    <span className="text-[10px] font-bold text-[#004B87] dark:text-sky-200 bg-blue-100/90 dark:bg-blue-950/60 px-2 py-0.5 rounded-md">
                       {phoneCallerMatches.length} {phoneCallerMatches.length === 1 ? 'اسم مسجل' : 'أسماء مسجلة'} لهذا الرقم
                     </span>
                   )}
@@ -863,7 +864,7 @@ export const NewCaseModal: React.FC<NewCaseModalProps> = ({
                           setCallerName(val);
                         }
                       }}
-                      className="w-full p-2.5 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 font-bold text-slate-900 text-xs shadow-2xs"
+                      className="w-full p-2.5 bg-white dark:bg-[#0B1D35] border border-slate-300 dark:border-[#004B87] rounded-xl focus:ring-2 focus:ring-blue-500 font-bold text-slate-900 dark:text-white text-xs shadow-2xs"
                     >
                       {phoneCallerMatches.map((m) => (
                         <option key={m.id} value={m.name}>
@@ -882,7 +883,7 @@ export const NewCaseModal: React.FC<NewCaseModalProps> = ({
                       value={callerName}
                       onChange={(e) => setCallerName(e.target.value)}
                       placeholder="أدخل اسم المتصل..."
-                      className="w-full p-2.5 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 font-bold text-slate-900 text-xs shadow-2xs"
+                      className="w-full p-2.5 bg-white dark:bg-[#0B1D35] border border-slate-300 dark:border-[#004B87] rounded-xl focus:ring-2 focus:ring-blue-500 font-bold text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 text-xs shadow-2xs"
                     />
                     {phoneCallerMatches.length > 0 && useCustomCallerNameInput && (
                       <button
@@ -891,7 +892,7 @@ export const NewCaseModal: React.FC<NewCaseModalProps> = ({
                           setUseCustomCallerNameInput(false);
                           applyCallerMatch(phoneCallerMatches[0]);
                         }}
-                        className="text-[11px] font-bold text-[#004B87] hover:underline cursor-pointer"
+                        className="text-[11px] font-bold text-[#004B87] dark:text-sky-300 hover:underline cursor-pointer"
                       >
                         العودة لاختيار اسم مسجل مسبقاً لهذا الرقم ({phoneCallerMatches.length})
                       </button>
@@ -904,11 +905,11 @@ export const NewCaseModal: React.FC<NewCaseModalProps> = ({
             {/* Optional 14-digit Caller National ID */}
             <div className="mt-3">
               <div className="flex items-center justify-between mb-1">
-                <label className="font-bold text-slate-700 flex items-center gap-1.5">
-                  <CreditCard className="w-3.5 h-3.5 text-blue-700" />
+                <label className="font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
+                  <CreditCard className="w-3.5 h-3.5 text-blue-700 dark:text-[#00E676]" />
                   <span>الرقم القومي للمتصل (14 رقماً)</span>
                 </label>
-                <span className="text-[10px] text-slate-600 bg-slate-200/80 px-2 py-0.5 rounded-md font-bold">
+                <span className="text-[10px] text-slate-600 dark:text-slate-300 bg-slate-200/80 dark:bg-[#0B1D35] px-2 py-0.5 rounded-md font-bold">
                   اختياري — غير أساسي
                 </span>
               </div>
@@ -925,16 +926,16 @@ export const NewCaseModal: React.FC<NewCaseModalProps> = ({
                     )
                   }
                   placeholder="أدخل 14 رقماً (اختياري)..."
-                  className="w-full p-2.5 pl-12 font-mono font-bold bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 text-slate-900 text-xs shadow-2xs text-left"
+                  className="w-full p-2.5 pl-12 font-mono font-bold bg-white dark:bg-[#0B1D35] border border-slate-300 dark:border-[#004B87] rounded-xl focus:ring-2 focus:ring-blue-500 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 text-xs shadow-2xs text-left"
                 />
                 {callerNationalId.length > 0 && (
-                  <span className="absolute left-3 top-2.5 text-[11px] font-mono text-slate-500">
+                  <span className="absolute left-3 top-2.5 text-[11px] font-mono text-slate-500 dark:text-slate-300">
                     {callerNationalId.length}/14
                   </span>
                 )}
               </div>
               {callerNationalId.length > 0 && callerNationalId.length < 14 && (
-                <span className="text-[10px] text-amber-700 block mt-1">
+                <span className="text-[10px] text-amber-700 dark:text-amber-300 block mt-1">
                   في حال كتابة الرقم القومي يجب استيفاء 14 رقماً ({callerNationalId.length}/14)
                 </span>
               )}
@@ -942,24 +943,24 @@ export const NewCaseModal: React.FC<NewCaseModalProps> = ({
 
             {/* Readonly preview of caller metadata if present */}
             {(callerTitle || callerClassification || secondaryPhone || callerEmail) && (
-              <div className="mt-2.5 pt-2.5 border-t border-slate-200/80 flex flex-wrap gap-2 text-[11px]">
+              <div className="mt-2.5 pt-2.5 border-t border-slate-200/80 dark:border-[#00386B] flex flex-wrap gap-2 text-[11px]">
                 {callerTitle && (
-                  <span className="bg-slate-200/70 text-slate-700 px-2 py-0.5 rounded-md font-semibold">
-                    الصفة: <strong className="text-slate-900">{callerTitle}</strong>
+                  <span className="bg-slate-200/70 dark:bg-[#0B1D35] text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded-md font-semibold">
+                    الصفة: <strong className="text-slate-900 dark:text-white">{callerTitle}</strong>
                   </span>
                 )}
                 {callerClassification && (
-                  <span className="bg-slate-200/70 text-slate-700 px-2 py-0.5 rounded-md font-semibold">
-                    التصنيف: <strong className="text-slate-900">{callerClassification}</strong>
+                  <span className="bg-slate-200/70 dark:bg-[#0B1D35] text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded-md font-semibold">
+                    التصنيف: <strong className="text-slate-900 dark:text-white">{callerClassification}</strong>
                   </span>
                 )}
                 {secondaryPhone && (
-                  <span className="bg-slate-200/70 text-slate-700 px-2 py-0.5 rounded-md font-semibold font-mono">
+                  <span className="bg-slate-200/70 dark:bg-[#0B1D35] text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded-md font-semibold font-mono">
                     هاتف إضافي: {secondaryPhone}
                   </span>
                 )}
                 {callerEmail && (
-                  <span className="bg-slate-200/70 text-slate-700 px-2 py-0.5 rounded-md font-semibold font-mono">
+                  <span className="bg-slate-200/70 dark:bg-[#0B1D35] text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded-md font-semibold font-mono">
                     البريد: {callerEmail}
                   </span>
                 )}
@@ -968,41 +969,41 @@ export const NewCaseModal: React.FC<NewCaseModalProps> = ({
           </div>
 
           {/* Section 4: Case Details (تفاصيل الحالة) */}
-          <div className="bg-slate-50/80 p-3.5 rounded-xl border border-slate-200 space-y-3">
+          <div className="bg-slate-50/80 dark:bg-[#071629] p-3.5 rounded-xl border border-slate-200 dark:border-[#00386B] space-y-3">
             <div className="flex items-center justify-between">
-              <h3 className="font-bold text-slate-800 flex items-center gap-1.5 text-sm">
-                <FileText className="w-4 h-4 text-blue-700" />
+              <h3 className="font-bold text-slate-800 dark:text-white flex items-center gap-1.5 text-sm">
+                <FileText className="w-4 h-4 text-blue-700 dark:text-[#00E676]" />
                 4. تفاصيل الحالة والخدمة الضريبية
               </h3>
             </div>
 
             {/* Auto Case ID & Live Date/Time Banner */}
-            <div className="bg-emerald-50/90 border border-emerald-200 rounded-xl p-3 flex flex-wrap items-center justify-between gap-2 shadow-2xs">
+            <div className="bg-emerald-50/90 dark:bg-emerald-950/35 border border-emerald-200 dark:border-emerald-700/60 rounded-xl p-3 flex flex-wrap items-center justify-between gap-2 shadow-2xs">
               <div className="flex items-center gap-2">
                 <div className="w-2.5 h-2.5 rounded-full bg-emerald-600 animate-pulse"></div>
-                <span className="font-bold text-emerald-950 text-xs">رقم الحالة:</span>
-                <span className="font-mono font-black text-emerald-800 bg-white px-2 py-0.5 rounded-md border border-emerald-200 text-xs">
+                <span className="font-bold text-emerald-950 dark:text-emerald-200 text-xs">رقم الحالة:</span>
+                <span className="font-mono font-black text-emerald-800 dark:text-[#00E676] bg-white dark:bg-[#0B1D35] px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-700/60 text-xs">
                   توليد تلقائي تسلسلي عام لكافة الحسابات (CRM-XXXXXX)
                 </span>
               </div>
-              <div className="text-[11px] font-semibold text-slate-700 bg-white/90 px-2.5 py-1 rounded-lg border border-slate-200 flex items-center gap-1.5">
-                <Clock className="w-3.5 h-3.5 text-slate-500" />
+              <div className="text-[11px] font-semibold text-slate-700 dark:text-slate-200 bg-white/90 dark:bg-[#0B1D35] px-2.5 py-1 rounded-lg border border-slate-200 dark:border-[#00386B] flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
                 <span>تاريخ ووقت الحالة:</span>
-                <span className="font-mono text-emerald-900 font-bold">{currentDateTimeStr || 'جاري التحديد...'}</span>
+                <span className="font-mono text-emerald-900 dark:text-[#00E676] font-bold">{currentDateTimeStr || 'جاري التحديد...'}</span>
               </div>
             </div>
 
             {/* Case Title with auto-suggestions & normalization */}
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label className="font-bold text-slate-800">
+                <label className="font-bold text-slate-800 dark:text-slate-100">
                   عنوان الحالة يدوياً مع استدعاء العناوين المسجلة مسبقاً *
                 </label>
                 {(rawTitle || agentNotes) && (
                   <button
                     type="button"
                     onClick={handleAIClassify}
-                    className="text-xs text-blue-700 hover:text-blue-900 font-bold flex items-center gap-1 cursor-pointer"
+                    className="text-xs text-blue-700 dark:text-sky-300 hover:text-blue-900 dark:hover:text-white font-bold flex items-center gap-1 cursor-pointer"
                   >
                     <Sparkles className="w-3.5 h-3.5 text-amber-500" />
                     اقتراح تصنيف ذكي بالذكاء الاصطناعي
@@ -1016,7 +1017,7 @@ export const NewCaseModal: React.FC<NewCaseModalProps> = ({
                 value={rawTitle}
                 onChange={(e) => setRawTitle(e.target.value)}
                 placeholder="اكتب عنوان الحالة أو اختر من العناوين المشابهة المسجلة مسبقاً..."
-                className="w-full p-2.5 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 font-bold text-slate-900 text-xs shadow-2xs"
+                className="w-full p-2.5 bg-white dark:bg-[#0B1D35] border border-slate-300 dark:border-[#004B87] rounded-xl focus:ring-2 focus:ring-blue-500 font-bold text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 text-xs shadow-2xs"
               />
               <datalist id="previous-case-titles">
                 {previousTitles.map((title, idx) => (
@@ -1027,13 +1028,13 @@ export const NewCaseModal: React.FC<NewCaseModalProps> = ({
               {/* Quick Suggestion Pills */}
               {matchingTitles.length > 0 && (
                 <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                  <span className="text-[10px] text-slate-500 font-bold">عناوين سابقة مشابهة:</span>
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold">عناوين سابقة مشابهة:</span>
                   {matchingTitles.map((mt, i) => (
                     <button
                       key={i}
                       type="button"
                       onClick={() => setRawTitle(mt)}
-                      className="text-[10px] bg-blue-50 hover:bg-blue-100 text-blue-900 border border-blue-200 px-2 py-0.5 rounded-md font-semibold transition-colors cursor-pointer"
+                      className="text-[10px] bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 dark:hover:bg-blue-900 text-blue-900 dark:text-sky-200 border border-blue-200 dark:border-blue-800 px-2 py-0.5 rounded-md font-semibold transition-colors cursor-pointer"
                     >
                       {mt}
                     </button>
@@ -1043,16 +1044,16 @@ export const NewCaseModal: React.FC<NewCaseModalProps> = ({
 
               {/* Normalization engine preview */}
               {normalizedTitle && (
-                <div className="mt-2 p-2.5 bg-blue-50/60 border border-blue-200 rounded-xl">
+                <div className="mt-2 p-2.5 bg-blue-50/60 dark:bg-blue-950/35 border border-blue-200 dark:border-blue-800 rounded-xl">
                   <div className="flex items-center justify-between text-[11px]">
-                    <span className="font-bold text-blue-950">
+                    <span className="font-bold text-blue-950 dark:text-sky-200">
                       العنوان الموحد بعد تطبيق معيار التوحيد (Normalization Engine):
                     </span>
-                    <span className="text-[10px] text-blue-800 bg-blue-100 px-2 py-0.5 rounded-full font-bold">
+                    <span className="text-[10px] text-blue-800 dark:text-sky-200 bg-blue-100 dark:bg-blue-900/70 px-2 py-0.5 rounded-full font-bold">
                       جاهز للاعتماد
                     </span>
                   </div>
-                  <div className="font-bold text-slate-900 mt-1 bg-white p-2 rounded-lg border border-blue-100 text-xs">
+                  <div className="font-bold text-slate-900 dark:text-white mt-1 bg-white dark:bg-[#0B1D35] p-2 rounded-lg border border-blue-100 dark:border-[#004B87] text-xs">
                     {normalizedTitle}
                   </div>
                 </div>
@@ -1063,11 +1064,11 @@ export const NewCaseModal: React.FC<NewCaseModalProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {/* Channel */}
               <div>
-                <label className="font-bold text-slate-700 block mb-1">قناة الاتصال *</label>
+                <label className="font-bold text-slate-700 dark:text-slate-200 block mb-1">قناة الاتصال *</label>
                 <select
                   value={channel}
                   onChange={(e) => setChannel(e.target.value as ContactChannel)}
-                  className="w-full p-2 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 font-semibold text-slate-900 text-xs shadow-2xs"
+                  className="w-full p-2 bg-white dark:bg-[#0B1D35] border border-slate-300 dark:border-[#004B87] rounded-xl focus:ring-2 focus:ring-blue-500 font-semibold text-slate-900 dark:text-white text-xs shadow-2xs"
                 >
                   <option value="اتصال هاتفي">اتصال هاتفي</option>
                   <option value="بريد إلكتروني">بريد إلكتروني</option>
@@ -1076,11 +1077,11 @@ export const NewCaseModal: React.FC<NewCaseModalProps> = ({
 
               {/* Tax Type */}
               <div>
-                <label className="font-bold text-slate-700 block mb-1">نوع الضريبة *</label>
+                <label className="font-bold text-slate-700 dark:text-slate-200 block mb-1">نوع الضريبة *</label>
                 <select
                   value={taxType}
                   onChange={(e) => setTaxType(e.target.value as TaxType)}
-                  className="w-full p-2 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 font-bold text-slate-900 text-xs shadow-2xs"
+                  className="w-full p-2 bg-white dark:bg-[#0B1D35] border border-slate-300 dark:border-[#004B87] rounded-xl focus:ring-2 focus:ring-blue-500 font-bold text-slate-900 dark:text-white text-xs shadow-2xs"
                 >
                   <option value="ضرائب دخل">ضرائب دخل</option>
                   <option value="ضرائب قيمة مضافة">ضرائب قيمة مضافة</option>
@@ -1089,7 +1090,7 @@ export const NewCaseModal: React.FC<NewCaseModalProps> = ({
 
               {/* Service Type */}
               <div>
-                <label className="font-bold text-slate-700 block mb-1">
+                <label className="font-bold text-slate-700 dark:text-slate-200 block mb-1">
                   نوع الخدمة ({taxType}) *
                 </label>
                 <select
@@ -1101,7 +1102,7 @@ export const NewCaseModal: React.FC<NewCaseModalProps> = ({
                       setCustomServiceType('');
                     }
                   }}
-                  className="w-full p-2 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 font-bold text-slate-900 text-xs shadow-2xs"
+                  className="w-full p-2 bg-white dark:bg-[#0B1D35] border border-slate-300 dark:border-[#004B87] rounded-xl focus:ring-2 focus:ring-blue-500 font-bold text-slate-900 dark:text-white text-xs shadow-2xs"
                 >
                   {currentTaxServices.map((srv) => (
                     <option key={srv} value={srv}>
@@ -1113,8 +1114,8 @@ export const NewCaseModal: React.FC<NewCaseModalProps> = ({
             </div>
 
             {serviceType === OTHER_SERVICE_OPTION && (
-              <div className="bg-white border border-[#004B87]/35 rounded-xl p-3 animate-fade-in">
-                <label className="font-bold text-[#00264D] block mb-1">
+              <div className="bg-white dark:bg-[#0B1D35] border border-[#004B87]/35 dark:border-[#004B87] rounded-xl p-3 animate-fade-in">
+                <label className="font-bold text-[#00264D] dark:text-sky-200 block mb-1">
                   كتابة نوع الخدمة يدوياً *
                 </label>
                 <input
@@ -1123,23 +1124,23 @@ export const NewCaseModal: React.FC<NewCaseModalProps> = ({
                   value={customServiceType}
                   onChange={(e) => setCustomServiceType(e.target.value)}
                   placeholder="اكتب نوع الخدمة المطلوبة يدوياً..."
-                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:ring-2 focus:ring-[#00A651] font-bold text-slate-900 text-xs focus:outline-none"
+                  className="w-full p-2.5 bg-slate-50 dark:bg-[#071629] border border-slate-300 dark:border-[#004B87] rounded-xl focus:bg-white dark:focus:bg-[#071629] focus:ring-2 focus:ring-[#00A651] font-bold text-slate-900 dark:text-white text-xs focus:outline-none"
                 />
               </div>
             )}
           </div>
 
           {/* Section 5: Notes, Replies & Staff Assignments */}
-          <div className="bg-slate-50/80 p-3.5 rounded-xl border border-slate-200 space-y-3.5">
-            <h3 className="font-bold text-slate-800 text-sm flex items-center gap-1.5">
-              <Headphones className="w-4 h-4 text-blue-700" />
+          <div className="bg-slate-50/80 dark:bg-[#071629] p-3.5 rounded-xl border border-slate-200 dark:border-[#00386B] space-y-3.5">
+            <h3 className="font-bold text-slate-800 dark:text-white text-sm flex items-center gap-1.5">
+              <Headphones className="w-4 h-4 text-blue-700 dark:text-[#00E676]" />
               5. الردود والملاحظات والمسؤولين
             </h3>
 
             {/* Agent Reply FIRST and slightly larger */}
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label className="font-black text-[#00264D] text-[13px]">
+                <label className="font-black text-[#00264D] dark:text-sky-200 text-[13px]">
                   رد وكلاء الاتصال (يدوياً أو Voice):
                 </label>
                 <button
@@ -1148,7 +1149,7 @@ export const NewCaseModal: React.FC<NewCaseModalProps> = ({
                     setVoiceTargetField('agentReply');
                     setIsVoiceModalOpen(true);
                   }}
-                  className="text-xs text-blue-700 hover:text-blue-900 font-bold flex items-center gap-1 bg-blue-100/80 hover:bg-blue-200 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                  className="text-xs text-blue-700 dark:text-sky-200 hover:text-blue-900 dark:hover:text-white font-bold flex items-center gap-1 bg-blue-100/80 dark:bg-blue-950/60 hover:bg-blue-200 dark:hover:bg-blue-900 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
                 >
                   <Mic className="w-3.5 h-3.5" />
                   <span>تسجيل صوتي Voice للرد</span>
@@ -1159,14 +1160,14 @@ export const NewCaseModal: React.FC<NewCaseModalProps> = ({
                 value={agentReply}
                 onChange={(e) => setAgentReply(e.target.value)}
                 placeholder="الرد أو التوجيه الموجه للممول في حال تم الرد..."
-                className="w-full p-3 bg-white border-2 border-[#004B87]/35 rounded-xl focus:ring-2 focus:ring-[#00A651] focus:border-[#00A651] text-sm font-medium text-slate-900 min-h-[104px] focus:outline-none"
+                className="w-full p-3 bg-white dark:bg-[#0B1D35] border-2 border-[#004B87]/35 dark:border-[#004B87] rounded-xl focus:ring-2 focus:ring-[#00A651] focus:border-[#00A651] text-sm font-medium text-slate-900 dark:text-white min-h-[104px] focus:outline-none"
               />
             </div>
 
             {/* Agent Notes SECOND below Agent Reply */}
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label className="font-bold text-slate-800">
+                <label className="font-bold text-slate-800 dark:text-slate-100">
                   ملاحظات وكلاء الاتصال (يدوياً أو Voice):
                 </label>
                 <button
@@ -1175,7 +1176,7 @@ export const NewCaseModal: React.FC<NewCaseModalProps> = ({
                     setVoiceTargetField('agentNotes');
                     setIsVoiceModalOpen(true);
                   }}
-                  className="text-xs text-blue-700 hover:text-blue-900 font-bold flex items-center gap-1 bg-blue-100/80 hover:bg-blue-200 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                  className="text-xs text-blue-700 dark:text-sky-200 hover:text-blue-900 dark:hover:text-white font-bold flex items-center gap-1 bg-blue-100/80 dark:bg-blue-950/60 hover:bg-blue-200 dark:hover:bg-blue-900 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
                 >
                   <Mic className="w-3.5 h-3.5" />
                   <span>تسجيل صوتي Voice مدعوم بالذكاء الاصطناعي</span>
@@ -1186,38 +1187,38 @@ export const NewCaseModal: React.FC<NewCaseModalProps> = ({
                 value={agentNotes}
                 onChange={(e) => setAgentNotes(e.target.value)}
                 placeholder="اكتب ملاحظات وتفاصيل اتصال الممول يدوياً أو استخدم التسجيل الصوتي..."
-                className="w-full p-2.5 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 text-xs"
+                className="w-full p-2.5 bg-white dark:bg-[#0B1D35] border border-slate-300 dark:border-[#004B87] rounded-xl focus:ring-2 focus:ring-blue-500 text-slate-900 dark:text-white text-xs"
               />
             </div>
 
             {/* Agent Employee Name (Automatically set from logged-in account) */}
             <div>
-              <label className="font-bold text-slate-800 block mb-1">
+              <label className="font-bold text-slate-800 dark:text-slate-100 block mb-1">
                 اسم موظف وكلاء الاتصال * (محدد تلقائياً حسب حساب الإنشاء)
               </label>
-              <div className="w-full p-2.5 bg-slate-100 border border-slate-300 rounded-xl font-bold text-slate-900 text-xs flex items-center justify-between gap-2">
+              <div className="w-full p-2.5 bg-slate-100 dark:bg-[#0B1D35] border border-slate-300 dark:border-[#004B87] rounded-xl font-bold text-slate-900 dark:text-white text-xs flex items-center justify-between gap-2">
                 <span className="flex items-center gap-1.5">
                   <Lock className="w-3.5 h-3.5 text-[#00A651]" />
                   <span>
                     {currentUser.fullName} ({currentUser.crmUser})
                   </span>
                 </span>
-                <span className="text-[10px] font-bold text-[#004B87] bg-white px-2 py-0.5 rounded border border-slate-200">
+                <span className="text-[10px] font-bold text-[#004B87] dark:text-[#00E676] bg-white dark:bg-[#071629] px-2 py-0.5 rounded border border-slate-200 dark:border-[#00386B]">
                   تلقائي من الحساب
                 </span>
               </div>
             </div>
 
             {/* Technical Team Reply & Employee (Disabled for agent, active for tech team) */}
-            <div className={`p-3.5 rounded-xl border ${isAgent ? 'bg-slate-100/80 border-slate-300' : 'bg-blue-50/60 border-blue-200'}`}>
+            <div className={`p-3.5 rounded-xl border ${isAgent ? 'bg-slate-100/80 dark:bg-[#0B1D35]/60 border-slate-300 dark:border-[#00386B]' : 'bg-blue-50/60 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800'}`}>
               <div className="flex items-center justify-between mb-1.5">
                 <div className="flex items-center gap-1.5">
-                  <Wrench className="w-4 h-4 text-blue-800" />
-                  <label className="font-bold text-slate-900">
+                  <Wrench className="w-4 h-4 text-blue-800 dark:text-sky-300" />
+                  <label className="font-bold text-slate-900 dark:text-white">
                     رد الفريق التقني (يدوياً أو Voice)
                   </label>
                   {isAgent && (
-                    <span className="text-[10px] font-bold text-amber-800 bg-amber-100 border border-amber-300 px-2 py-0.5 rounded-full flex items-center gap-1">
+                    <span className="text-[10px] font-bold text-amber-800 dark:text-amber-200 bg-amber-100 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-700 px-2 py-0.5 rounded-full flex items-center gap-1">
                       <Lock className="w-3 h-3" />
                       غير مفعل لوكيل الاتصال (خاص بالفريق التقني فقط)
                     </span>
@@ -1231,7 +1232,7 @@ export const NewCaseModal: React.FC<NewCaseModalProps> = ({
                       setVoiceTargetField('managementReply');
                       setIsVoiceModalOpen(true);
                     }}
-                    className="text-xs text-blue-800 hover:text-blue-950 font-bold flex items-center gap-1 bg-blue-200/70 hover:bg-blue-200 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                    className="text-xs text-blue-800 dark:text-sky-200 hover:text-blue-950 dark:hover:text-white font-bold flex items-center gap-1 bg-blue-200/70 dark:bg-blue-900/70 hover:bg-blue-200 dark:hover:bg-blue-800 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
                   >
                     <Mic className="w-3.5 h-3.5" />
                     <span>تسجيل صوتي Voice للفريق التقني</span>
@@ -1251,21 +1252,21 @@ export const NewCaseModal: React.FC<NewCaseModalProps> = ({
                 }
                 className={`w-full p-2.5 rounded-xl border text-xs ${
                   isAgent
-                    ? 'bg-slate-200/60 border-slate-300 text-slate-500 cursor-not-allowed'
-                    : 'bg-white border-blue-300 focus:ring-2 focus:ring-blue-500 text-slate-900'
+                    ? 'bg-slate-200/60 dark:bg-[#071629] border-slate-300 dark:border-[#00386B] text-slate-500 dark:text-slate-400 cursor-not-allowed'
+                    : 'bg-white dark:bg-[#0B1D35] border-blue-300 dark:border-[#004B87] focus:ring-2 focus:ring-blue-500 text-slate-900 dark:text-white'
                 }`}
               />
 
               {/* Technical / Management Employee Name (Automatically set from logged-in account) */}
               <div className="mt-3">
-                <label className="font-bold text-slate-800 block mb-1">
+                <label className="font-bold text-slate-800 dark:text-slate-100 block mb-1">
                   اسم موظف الإدارة والدعم التقني (محدد تلقائياً حسب حساب الإنشاء)
                 </label>
                 <div
                   className={`w-full p-2.5 rounded-xl border text-xs font-bold flex items-center justify-between gap-2 ${
                     isAgent
-                      ? 'bg-slate-200/60 border-slate-300 text-slate-500'
-                      : 'bg-slate-100 border-blue-300 text-slate-900'
+                      ? 'bg-slate-200/60 dark:bg-[#071629] border-slate-300 dark:border-[#00386B] text-slate-500 dark:text-slate-400'
+                      : 'bg-slate-100 dark:bg-[#0B1D35] border-blue-300 dark:border-[#004B87] text-slate-900 dark:text-white'
                   }`}
                 >
                   <span>
@@ -1274,7 +1275,7 @@ export const NewCaseModal: React.FC<NewCaseModalProps> = ({
                       : `${currentUser.fullName} (${currentUser.crmUser})`}
                   </span>
                   {!isAgent && (
-                    <span className="text-[10px] font-bold text-[#004B87] bg-white px-2 py-0.5 rounded border border-blue-200">
+                    <span className="text-[10px] font-bold text-[#004B87] dark:text-[#00E676] bg-white dark:bg-[#071629] px-2 py-0.5 rounded border border-blue-200 dark:border-[#00386B]">
                       تلقائي من الحساب
                     </span>
                   )}
@@ -1291,11 +1292,11 @@ export const NewCaseModal: React.FC<NewCaseModalProps> = ({
           />
 
           {/* Footer Actions */}
-          <div className="pt-3 border-t border-slate-200 flex items-center justify-end gap-2.5">
+          <div className="pt-3 border-t border-slate-200 dark:border-[#00386B] flex items-center justify-end gap-2.5">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+              className="px-4 py-2.5 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[#002B54] rounded-xl transition-colors"
             >
               إلغاء
             </button>

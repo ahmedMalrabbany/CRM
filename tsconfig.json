@@ -27,7 +27,6 @@
   },
   "exclude": [
     "node_modules",
-    "dist",
-    "scripts/migrate-from-firestore.ts"
+    "dist"
   ]
 }

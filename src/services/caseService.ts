@@ -20,7 +20,7 @@ import {
   addDoc,
   writeBatch
 } from '../lib/sheetsDb';
-import { db, handleFirestoreError, OperationType } from '../config/firebase';
+import { db, handleDatabaseError, OperationType } from '../config/sheetsConfig';
 import {
   Case,
   CaseStatus,
@@ -42,22 +42,21 @@ const COUNTER_DOC_PATH = 'counters/cases';
 const NOTIFICATIONS_COLLECTION = 'notifications';
 
 /**
- * Recursively removes any key with `undefined` value so Firestore never throws
- * "Unsupported field value: undefined".
+ * Recursively removes any key with `undefined` value so Sheets persistence never stores undefined fields.
  */
-export function cleanFirestoreData<T>(data: T): T {
+export function sanitizeRecordData<T>(data: T): T {
   if (data === null || data === undefined) {
     return null as any;
   }
   if (Array.isArray(data)) {
-    return data.map((item) => cleanFirestoreData(item)) as any;
+    return data.map((item) => sanitizeRecordData(item)) as any;
   }
   if (typeof data === 'object') {
     const cleaned: Record<string, any> = {};
     for (const [key, value] of Object.entries(data)) {
       if (value !== undefined) {
         if (value && typeof value === 'object' && !(value instanceof Date)) {
-          cleaned[key] = cleanFirestoreData(value);
+          cleaned[key] = sanitizeRecordData(value);
         } else {
           cleaned[key] = value;
         }
@@ -90,7 +89,7 @@ export async function generateNextCaseId(): Promise<string> {
 
     return `CRM-${String(nextNumber).padStart(6, '0')}`;
   } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, COUNTER_DOC_PATH);
+    handleDatabaseError(error, OperationType.WRITE, COUNTER_DOC_PATH);
   }
 }
 
@@ -104,9 +103,9 @@ export async function addTimelineEvent(caseDocId: string, event: Omit<TimelineEv
       ...event,
       createdAt: new Date().toISOString(),
     };
-    await addDoc(timelineRef, cleanFirestoreData(newEvent));
+    await addDoc(timelineRef, sanitizeRecordData(newEvent));
   } catch (error) {
-    handleFirestoreError(error, OperationType.CREATE, `${CASES_COLLECTION}/${caseDocId}/timeline`);
+    handleDatabaseError(error, OperationType.CREATE, `${CASES_COLLECTION}/${caseDocId}/timeline`);
   }
 }
 
@@ -226,7 +225,7 @@ export function formatOverdueDurationArabic(hours: number): string {
 const syncedOverdueNotificationKeys = new Set<string>();
 
 /**
- * Ensures a persistent Firestore notification exists for each case staying in a user's
+ * Ensures a persistent notification exists for each case staying in a user's
  * account for more than 72 hours without action (deduplicated per case updatedAt cycle).
  */
 export async function syncOverdueNotificationsForUser(
@@ -274,7 +273,7 @@ export async function syncOverdueNotificationsForUser(
         createdAt: new Date().toISOString(),
       };
 
-      await setDoc(notifRef, cleanFirestoreData(notifPayload));
+      await setDoc(notifRef, sanitizeRecordData(notifPayload));
     } catch (error) {
       syncedOverdueNotificationKeys.delete(notifDocId);
       console.warn('Overdue notification sync note:', error);
@@ -301,7 +300,7 @@ export async function sendNotification(params: {
       isRead: false,
       createdAt: new Date().toISOString(),
     };
-    await setDoc(notifRef, cleanFirestoreData(notif));
+    await setDoc(notifRef, sanitizeRecordData(notif));
   } catch (error) {
     console.error('Failed to send notification:', error);
   }
@@ -345,7 +344,7 @@ export async function sendTargetedAdminNotifications(params: {
     const now = new Date().toISOString();
     const batchId = `NOTICE_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 
-    // Commit in chunks of 400 to respect Firestore 500 writes/batch limit
+    // Commit in chunks of 400 per write batch
     for (let i = 0; i < uniqueRecipients.length; i += 400) {
       const batch = writeBatch(db);
       const slice = uniqueRecipients.slice(i, i + 400);
@@ -368,7 +367,7 @@ export async function sendTargetedAdminNotifications(params: {
           acknowledged: false,
           createdAt: now,
         };
-        batch.set(notifRef, cleanFirestoreData(notif));
+        batch.set(notifRef, sanitizeRecordData(notif));
       }
       await batch.commit();
     }
@@ -388,7 +387,7 @@ export async function sendTargetedAdminNotifications(params: {
     if (error instanceof Error && error.message.includes('يرجى')) {
       throw error;
     }
-    handleFirestoreError(error, OperationType.CREATE, NOTIFICATIONS_COLLECTION);
+    handleDatabaseError(error, OperationType.CREATE, NOTIFICATIONS_COLLECTION);
   }
 }
 
@@ -465,7 +464,7 @@ export async function resetNotificationsForFreshSend(
     if (error instanceof Error && error.message.includes('مدير النظام')) {
       throw error;
     }
-    handleFirestoreError(error, OperationType.DELETE, NOTIFICATIONS_COLLECTION);
+    handleDatabaseError(error, OperationType.DELETE, NOTIFICATIONS_COLLECTION);
   }
 }
 
@@ -507,7 +506,7 @@ export async function deleteSentNotificationBatch(
     if (error instanceof Error && error.message.includes('مدير النظام')) {
       throw error;
     }
-    handleFirestoreError(error, OperationType.DELETE, NOTIFICATIONS_COLLECTION);
+    handleDatabaseError(error, OperationType.DELETE, NOTIFICATIONS_COLLECTION);
   }
 }
 
@@ -576,7 +575,7 @@ export async function deleteSelectedNotifications(
     if (error instanceof Error && error.message.includes('مدير النظام')) {
       throw error;
     }
-    handleFirestoreError(error, OperationType.DELETE, NOTIFICATIONS_COLLECTION);
+    handleDatabaseError(error, OperationType.DELETE, NOTIFICATIONS_COLLECTION);
   }
 }
 
@@ -619,7 +618,7 @@ export async function createCase(
       isDeleted: false,
     };
 
-    await setDoc(caseDocRef, cleanFirestoreData(fullCase));
+    await setDoc(caseDocRef, sanitizeRecordData(fullCase));
 
     // Add first timeline record
     const attachmentsCount = Array.isArray(caseData.attachments) ? caseData.attachments.length : 0;
@@ -651,7 +650,7 @@ export async function createCase(
 
     return fullCase;
   } catch (error) {
-    handleFirestoreError(error, OperationType.CREATE, CASES_COLLECTION);
+    handleDatabaseError(error, OperationType.CREATE, CASES_COLLECTION);
   }
 }
 
@@ -688,7 +687,7 @@ export async function addAttachmentsToCase(
     const now = new Date().toISOString();
     await updateDoc(
       caseRef,
-      cleanFirestoreData({
+      sanitizeRecordData({
         attachments: mergedAttachments,
         updatedById: actingUser.id,
         updatedByName: actingUser.fullName,
@@ -729,7 +728,7 @@ export async function addAttachmentsToCase(
     ) {
       throw error;
     }
-    handleFirestoreError(error, OperationType.UPDATE, `${CASES_COLLECTION}/${caseDocId}`);
+    handleDatabaseError(error, OperationType.UPDATE, `${CASES_COLLECTION}/${caseDocId}`);
   }
 }
 
@@ -766,7 +765,7 @@ export async function removeAttachmentFromCase(
 
     await updateDoc(
       caseRef,
-      cleanFirestoreData({
+      sanitizeRecordData({
         attachments: remaining,
         updatedById: actingUser.id,
         updatedByName: actingUser.fullName,
@@ -806,7 +805,7 @@ export async function removeAttachmentFromCase(
     ) {
       throw error;
     }
-    handleFirestoreError(error, OperationType.UPDATE, `${CASES_COLLECTION}/${caseDocId}`);
+    handleDatabaseError(error, OperationType.UPDATE, `${CASES_COLLECTION}/${caseDocId}`);
   }
 }
 
@@ -831,7 +830,7 @@ export async function transferCase(
     const newStatus: CaseStatus = targetRole === 'management' ? 'محولة للإدارة' : 'محولة للدعم الفني';
     const now = new Date().toISOString();
 
-    await updateDoc(caseRef, cleanFirestoreData({
+    await updateDoc(caseRef, sanitizeRecordData({
       status: newStatus,
       assignedTo: '',
       assignedToName: '',
@@ -868,7 +867,7 @@ export async function transferCase(
     if (error instanceof Error && (error.message.includes('الحالة') || error.message.includes('حسابه'))) {
       throw error;
     }
-    handleFirestoreError(error, OperationType.UPDATE, `${CASES_COLLECTION}/${caseDocId}`);
+    handleDatabaseError(error, OperationType.UPDATE, `${CASES_COLLECTION}/${caseDocId}`);
   }
 }
 
@@ -950,7 +949,7 @@ export async function claimCase(caseDocId: string, user: User): Promise<void> {
     ) {
       throw error;
     }
-    handleFirestoreError(error, OperationType.WRITE, `${CASES_COLLECTION}/${caseDocId}`);
+    handleDatabaseError(error, OperationType.WRITE, `${CASES_COLLECTION}/${caseDocId}`);
   }
 }
 
@@ -1007,7 +1006,7 @@ export async function assignCase(
     }
 
     const now = new Date().toISOString();
-    await updateDoc(caseRef, cleanFirestoreData({
+    await updateDoc(caseRef, sanitizeRecordData({
       assignedTo: targetUser.id,
       assignedToName: targetUser.fullName,
       assignedToRole: targetUser.role,
@@ -1059,7 +1058,7 @@ export async function assignCase(
     ) {
       throw error;
     }
-    handleFirestoreError(error, OperationType.UPDATE, `${CASES_COLLECTION}/${caseDocId}`);
+    handleDatabaseError(error, OperationType.UPDATE, `${CASES_COLLECTION}/${caseDocId}`);
   }
 }
 
@@ -1086,7 +1085,7 @@ export async function updateAgentResponse(
     }
 
     const now = new Date().toISOString();
-    await updateDoc(caseRef, cleanFirestoreData({
+    await updateDoc(caseRef, sanitizeRecordData({
       agentNotes: params.agentNotes ?? caseData.agentNotes ?? '',
       agentReply: params.agentReply ?? caseData.agentReply ?? '',
       agentEmployeeName: params.agentEmployeeName,
@@ -1110,7 +1109,7 @@ export async function updateAgentResponse(
     if (error instanceof Error && (error.message.includes('الحالة') || error.message.includes('حسابه'))) {
       throw error;
     }
-    handleFirestoreError(error, OperationType.UPDATE, `${CASES_COLLECTION}/${caseDocId}`);
+    handleDatabaseError(error, OperationType.UPDATE, `${CASES_COLLECTION}/${caseDocId}`);
   }
 }
 
@@ -1136,7 +1135,7 @@ export async function updateManagementResponse(
     }
 
     const now = new Date().toISOString();
-    await updateDoc(caseRef, cleanFirestoreData({
+    await updateDoc(caseRef, sanitizeRecordData({
       managementReply: params.managementReply,
       managementEmployeeName: params.managementEmployeeName,
       updatedById: user.id,
@@ -1159,7 +1158,7 @@ export async function updateManagementResponse(
     if (error instanceof Error && (error.message.includes('الحالة') || error.message.includes('حسابه'))) {
       throw error;
     }
-    handleFirestoreError(error, OperationType.UPDATE, `${CASES_COLLECTION}/${caseDocId}`);
+    handleDatabaseError(error, OperationType.UPDATE, `${CASES_COLLECTION}/${caseDocId}`);
   }
 }
 
@@ -1176,8 +1175,12 @@ export async function bulkReplyToManagementCases(
   },
   user: User
 ): Promise<{ updatedCount: number; skippedCount: number }> {
-  if (user.role !== 'management' && user.role !== 'technical_support') {
-    throw new Error('الرد الموحد على الحالات المتعددة متاح فقط لحسابات الإدارة والدعم التقني.');
+  if (
+    user.role !== 'management' &&
+    user.role !== 'technical_support' &&
+    user.role !== 'super_admin'
+  ) {
+    throw new Error('الرد الموحد على الحالات المتعددة متاح فقط لحسابات الإدارة والدعم التقني ومدير النظام.');
   }
 
   const replyText = (params.managementReply || '').trim();
@@ -1230,7 +1233,7 @@ export async function bulkReplyToManagementCases(
         updatePayload.assignedToRole = caseData.createdByRole;
       }
 
-      await updateDoc(caseRef, cleanFirestoreData(updatePayload));
+      await updateDoc(caseRef, sanitizeRecordData(updatePayload));
 
       const previewSnippet = `${replyText.slice(0, 100)}${replyText.length > 100 ? '...' : ''}`;
       if (params.returnToAgent && caseData.createdById) {
@@ -1314,7 +1317,7 @@ export async function returnCaseToAgent(
     }
 
     const now = new Date().toISOString();
-    await updateDoc(caseRef, cleanFirestoreData({
+    await updateDoc(caseRef, sanitizeRecordData({
       status: 'محولة لوكيل الاتصال',
       assignedTo: caseData.createdById,
       assignedToName: caseData.createdByName,
@@ -1348,7 +1351,7 @@ export async function returnCaseToAgent(
     if (error instanceof Error && (error.message.includes('الحالة') || error.message.includes('حسابه'))) {
       throw error;
     }
-    handleFirestoreError(error, OperationType.UPDATE, `${CASES_COLLECTION}/${caseDocId}`);
+    handleDatabaseError(error, OperationType.UPDATE, `${CASES_COLLECTION}/${caseDocId}`);
   }
 }
 
@@ -1403,7 +1406,7 @@ export async function closeCase(
       updateData.agentEmployeeName = caseData.agentEmployeeName || user.fullName;
     }
 
-    await updateDoc(caseRef, cleanFirestoreData(updateData));
+    await updateDoc(caseRef, sanitizeRecordData(updateData));
 
     await addTimelineEvent(caseDocId, {
       caseId: caseData.caseId,
@@ -1435,7 +1438,7 @@ export async function closeCase(
     ) {
       throw error;
     }
-    handleFirestoreError(error, OperationType.UPDATE, `${CASES_COLLECTION}/${caseDocId}`);
+    handleDatabaseError(error, OperationType.UPDATE, `${CASES_COLLECTION}/${caseDocId}`);
   }
 }
 
@@ -1478,7 +1481,7 @@ export async function reopenCase(caseDocId: string, reason: string, user: User):
       updatePayload.assignedToRole = user.role;
     }
 
-    await updateDoc(caseRef, cleanFirestoreData(updatePayload));
+    await updateDoc(caseRef, sanitizeRecordData(updatePayload));
 
     await addTimelineEvent(caseDocId, {
       caseId: caseData.caseId,
@@ -1505,7 +1508,7 @@ export async function reopenCase(caseDocId: string, reason: string, user: User):
     if (error instanceof Error && (error.message.includes('الحالة') || error.message.includes('حسابه') || error.message.includes('الحساب'))) {
       throw error;
     }
-    handleFirestoreError(error, OperationType.UPDATE, `${CASES_COLLECTION}/${caseDocId}`);
+    handleDatabaseError(error, OperationType.UPDATE, `${CASES_COLLECTION}/${caseDocId}`);
   }
 }
 
@@ -1535,7 +1538,7 @@ export async function deleteCase(caseDocId: string, hardDelete: boolean, user: U
         details: 'تم الحذف الفيزيائي بواسطة مدير النظام',
       });
     } else {
-      await updateDoc(caseRef, cleanFirestoreData({
+      await updateDoc(caseRef, sanitizeRecordData({
         isDeleted: true,
         updatedById: user.id,
         updatedByName: user.fullName,
@@ -1560,7 +1563,7 @@ export async function deleteCase(caseDocId: string, hardDelete: boolean, user: U
       });
     }
   } catch (error) {
-    handleFirestoreError(error, OperationType.DELETE, `${CASES_COLLECTION}/${caseDocId}`);
+    handleDatabaseError(error, OperationType.DELETE, `${CASES_COLLECTION}/${caseDocId}`);
   }
 }
 
@@ -1587,7 +1590,7 @@ export function subscribeToCases(callback: (cases: Case[]) => void): () => void 
       callback(cases);
     },
     (error) => {
-      handleFirestoreError(error, OperationType.LIST, CASES_COLLECTION);
+      handleDatabaseError(error, OperationType.LIST, CASES_COLLECTION);
     }
   );
 }
@@ -1614,7 +1617,7 @@ export function subscribeToCaseTimeline(
       callback(events);
     },
     (error) => {
-      handleFirestoreError(error, OperationType.LIST, `${CASES_COLLECTION}/${caseDocId}/timeline`);
+      handleDatabaseError(error, OperationType.LIST, `${CASES_COLLECTION}/${caseDocId}/timeline`);
     }
   );
 }
@@ -1689,7 +1692,7 @@ export async function updateCaseStatusPipeline(
       updatePayload.assignedToRole = existingCase.createdByRole;
     }
 
-    await updateDoc(caseRef, cleanFirestoreData(updatePayload));
+    await updateDoc(caseRef, sanitizeRecordData(updatePayload));
 
     await addTimelineEvent(caseDocId, {
       caseId: existingCase.caseId,
@@ -1716,7 +1719,7 @@ export async function updateCaseStatusPipeline(
     if (error instanceof Error && (error.message.includes('الحالة') || error.message.includes('حسابه'))) {
       throw error;
     }
-    handleFirestoreError(error, OperationType.UPDATE, `${CASES_COLLECTION}/${caseDocId}`);
+    handleDatabaseError(error, OperationType.UPDATE, `${CASES_COLLECTION}/${caseDocId}`);
   }
 }
 

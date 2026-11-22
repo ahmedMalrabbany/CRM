@@ -14,10 +14,10 @@ import {
   limit,
   onSnapshot
 } from '../lib/sheetsDb';
-import { db, handleFirestoreError, OperationType } from '../config/firebase';
+import { db, handleDatabaseError, OperationType } from '../config/sheetsConfig';
 import { Taxpayer, TaxType, User } from '../types';
 import { logAuditEvent } from './auditService';
-import { cleanFirestoreData } from './caseService';
+import { sanitizeRecordData } from './caseService';
 
 const TAXPAYERS_COLLECTION = 'taxpayers';
 
@@ -29,7 +29,7 @@ export async function getTaxpayerByNumber(taxRegistrationNumber: string): Promis
     if (!snap.exists()) return null;
     return { id: snap.id, ...(snap.data() as Omit<Taxpayer, 'id'>) };
   } catch (error) {
-    handleFirestoreError(error, OperationType.GET, `${TAXPAYERS_COLLECTION}/${cleanNumber}`);
+    handleDatabaseError(error, OperationType.GET, `${TAXPAYERS_COLLECTION}/${cleanNumber}`);
   }
 }
 
@@ -56,7 +56,7 @@ export async function upsertTaxpayer(data: {
         notes: data.notes || existingData.notes,
         updatedAt: new Date().toISOString(),
       };
-      await updateDoc(docRef, cleanFirestoreData(updated));
+      await updateDoc(docRef, sanitizeRecordData(updated));
       return { ...existingData, ...updated, id: cleanNumber };
     } else {
       const newTaxpayer: Omit<Taxpayer, 'id'> = {
@@ -68,11 +68,11 @@ export async function upsertTaxpayer(data: {
         notes: data.notes || '',
         createdAt: new Date().toISOString(),
       };
-      await setDoc(docRef, cleanFirestoreData(newTaxpayer));
+      await setDoc(docRef, sanitizeRecordData(newTaxpayer));
       return { id: cleanNumber, ...newTaxpayer };
     }
   } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, `${TAXPAYERS_COLLECTION}/${cleanNumber}`);
+    handleDatabaseError(error, OperationType.WRITE, `${TAXPAYERS_COLLECTION}/${cleanNumber}`);
   }
 }
 
@@ -117,7 +117,7 @@ export async function updateTaxpayer(
         updatedAt: now,
       };
 
-      await setDoc(newRef, cleanFirestoreData(migratedTaxpayer));
+      await setDoc(newRef, sanitizeRecordData(migratedTaxpayer));
       await deleteDoc(oldRef);
 
       if (actingUser) {
@@ -145,7 +145,7 @@ export async function updateTaxpayer(
       updatedAt: now,
     };
 
-    await updateDoc(oldRef, cleanFirestoreData(updatedFields));
+    await updateDoc(oldRef, sanitizeRecordData(updatedFields));
 
     if (actingUser) {
       await logAuditEvent({
@@ -168,7 +168,7 @@ export async function updateTaxpayer(
     if (error instanceof Error && (error.message.includes('سجل الممول') || error.message.includes('رقم التسجيل الضريبي'))) {
       throw error;
     }
-    handleFirestoreError(error, OperationType.UPDATE, `${TAXPAYERS_COLLECTION}/${taxpayerId}`);
+    handleDatabaseError(error, OperationType.UPDATE, `${TAXPAYERS_COLLECTION}/${taxpayerId}`);
   }
 }
 
@@ -194,7 +194,7 @@ export async function deleteTaxpayer(
       details: `تم حذف الممول: ${taxpayerName} (${taxpayerId})`,
     });
   } catch (error) {
-    handleFirestoreError(error, OperationType.DELETE, `${TAXPAYERS_COLLECTION}/${taxpayerId}`);
+    handleDatabaseError(error, OperationType.DELETE, `${TAXPAYERS_COLLECTION}/${taxpayerId}`);
   }
 }
 
@@ -210,7 +210,7 @@ export function subscribeToTaxpayers(callback: (taxpayers: Taxpayer[]) => void):
       callback(list);
     },
     (error) => {
-      handleFirestoreError(error, OperationType.LIST, TAXPAYERS_COLLECTION);
+      handleDatabaseError(error, OperationType.LIST, TAXPAYERS_COLLECTION);
     }
   );
 }

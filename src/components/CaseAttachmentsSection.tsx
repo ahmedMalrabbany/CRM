@@ -60,13 +60,13 @@ function getFileIcon(mimeType: string, fileName: string) {
 function getStageBadgeStyle(stage: CaseAttachmentStage): string {
   switch (stage) {
     case 'create':
-      return 'bg-slate-100 text-slate-800 border-slate-300';
+      return 'bg-slate-100 dark:bg-[#0B1D35] text-slate-800 dark:text-slate-200 border-slate-300 dark:border-[#004B87]';
     case 'agent_reply':
-      return 'bg-emerald-100 text-emerald-900 border-emerald-300';
+      return 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-900 dark:text-emerald-200 border-emerald-300 dark:border-emerald-700';
     case 'management_reply':
-      return 'bg-blue-100 text-blue-900 border-blue-300';
+      return 'bg-blue-100 dark:bg-blue-950/60 text-blue-900 dark:text-sky-200 border-blue-300 dark:border-blue-700';
     default:
-      return 'bg-slate-100 text-slate-700 border-slate-300';
+      return 'bg-slate-100 dark:bg-[#0B1D35] text-slate-700 dark:text-slate-300 border-slate-300 dark:border-[#004B87]';
   }
 }
 
@@ -105,7 +105,7 @@ export const CaseAttachmentPreviewModal: React.FC<{
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="bg-white rounded-2xl shadow-2xl border border-slate-300 w-full max-w-4xl max-h-[92dvh] flex flex-col overflow-hidden"
+        className="bg-white dark:bg-[#0B1D35] rounded-2xl shadow-2xl border border-slate-300 dark:border-[#00386B] w-full max-w-4xl max-h-[92dvh] flex flex-col overflow-hidden"
       >
         <div className="px-4 py-3 bg-[#00264D] text-white flex items-center justify-between gap-3 border-b border-[#004B87] shrink-0">
           <div className="flex items-center gap-2.5 min-w-0">
@@ -141,7 +141,7 @@ export const CaseAttachmentPreviewModal: React.FC<{
           </div>
         </div>
 
-        <div className="flex-1 overflow-auto bg-slate-100 p-4 flex items-center justify-center min-h-[360px]">
+        <div className="flex-1 overflow-auto bg-slate-100 dark:bg-[#071629] p-4 flex items-center justify-center min-h-[360px]">
           {isImg ? (
             <img
               src={target.inlineUrl}
@@ -152,15 +152,15 @@ export const CaseAttachmentPreviewModal: React.FC<{
             <iframe
               src={target.inlineUrl}
               title={target.fileName}
-              className="w-full h-[75dvh] rounded-xl border border-slate-300 bg-white"
+              className="w-full h-[75dvh] rounded-xl border border-slate-300 dark:border-[#00386B] bg-white"
             />
           ) : (
-            <div className="text-center bg-white p-6 rounded-2xl border border-slate-200 max-w-md space-y-3">
-              <FileIcon className="w-10 h-10 text-[#004B87] mx-auto" />
-              <div className="font-bold text-sm text-slate-900">
+            <div className="text-center bg-white dark:bg-[#0B1D35] p-6 rounded-2xl border border-slate-200 dark:border-[#00386B] max-w-md space-y-3">
+              <FileIcon className="w-10 h-10 text-[#004B87] dark:text-[#00E676] mx-auto" />
+              <div className="font-bold text-sm text-slate-900 dark:text-white">
                 المعاينة المباشرة غير متاحة لهذه الصيغة داخل المتصفح
               </div>
-              <p className="text-xs text-slate-600">
+              <p className="text-xs text-slate-600 dark:text-slate-300">
                 يمكنك تحميل المستند مباشرة على جهازك لفتحه بالتطبيق المناسب.
               </p>
               {target.downloadUrl && (
@@ -242,14 +242,14 @@ export const PendingAttachmentsPicker: React.FC<PendingAttachmentsPickerProps> =
   };
 
   return (
-    <div className="bg-slate-50/80 p-3.5 rounded-xl border border-slate-200 space-y-2.5">
+    <div className="bg-slate-50/80 dark:bg-[#071629] p-3.5 rounded-xl border border-slate-200 dark:border-[#00386B] space-y-2.5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h3 className="font-bold text-slate-800 flex items-center gap-1.5 text-sm">
+          <h3 className="font-bold text-slate-800 dark:text-white flex items-center gap-1.5 text-sm">
             <Paperclip className="w-4 h-4 text-[#00A651]" />
             6. المستندات والمرفقات (اختياري)
           </h3>
-          <p className="text-[11px] text-slate-500 mt-0.5">
+          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
             يمكنك إرفاق صور الشاشات، مستندات PDF، أو ملفات Word / Excel (بحد أقصى 10 ميجابايت للملف الواحد).
           </p>
         </div>
@@ -277,8 +277,8 @@ export const PendingAttachmentsPicker: React.FC<PendingAttachmentsPickerProps> =
       </div>
 
       {localError && (
-        <div className="p-2 bg-rose-50 border border-rose-200 rounded-lg text-rose-800 text-[11px] font-bold flex items-center gap-1.5">
-          <AlertCircle className="w-3.5 h-3.5 shrink-0 text-rose-600" />
+        <div className="p-2 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-lg text-rose-800 dark:text-rose-200 text-[11px] font-bold flex items-center gap-1.5">
+          <AlertCircle className="w-3.5 h-3.5 shrink-0 text-rose-600 dark:text-rose-400" />
           <span>{localError}</span>
         </div>
       )}
@@ -288,13 +288,13 @@ export const PendingAttachmentsPicker: React.FC<PendingAttachmentsPickerProps> =
           {files.map((item) => (
             <div
               key={item.localId}
-              className="flex items-center justify-between gap-2 bg-white border border-slate-200 rounded-xl px-3 py-2 shadow-2xs"
+              className="flex items-center justify-between gap-2 bg-white dark:bg-[#0B1D35] border border-slate-200 dark:border-[#004B87] rounded-xl px-3 py-2 shadow-2xs"
             >
               <div className="flex items-center gap-2 min-w-0">
                 {getFileIcon(item.file.type, item.file.name)}
                 <div className="min-w-0">
-                  <div className="font-bold text-slate-900 text-xs truncate">{item.file.name}</div>
-                  <div className="text-[10px] text-slate-500">
+                  <div className="font-bold text-slate-900 dark:text-white text-xs truncate">{item.file.name}</div>
+                  <div className="text-[10px] text-slate-500 dark:text-slate-400">
                     {formatFileSizeArabic(item.file.size)} · جاهز للرفع عند الحفظ
                   </div>
                 </div>
@@ -313,7 +313,7 @@ export const PendingAttachmentsPicker: React.FC<PendingAttachmentsPickerProps> =
                         subtitle: 'معاينة قبل حفظ الحالة',
                       })
                     }
-                    className="p-1.5 text-[#004B87] hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
+                    className="p-1.5 text-[#004B87] dark:text-sky-300 hover:bg-blue-50 dark:hover:bg-[#002B54] rounded-lg transition-colors cursor-pointer"
                     title="معاينة المستند"
                   >
                     <Eye className="w-3.5 h-3.5" />
@@ -323,7 +323,7 @@ export const PendingAttachmentsPicker: React.FC<PendingAttachmentsPickerProps> =
                   type="button"
                   disabled={disabled}
                   onClick={() => handleRemove(item.localId)}
-                  className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg transition-colors disabled:opacity-50 cursor-pointer"
+                  className="p-1.5 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-lg transition-colors disabled:opacity-50 cursor-pointer"
                   title="إزالة المستند"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
@@ -335,7 +335,7 @@ export const PendingAttachmentsPicker: React.FC<PendingAttachmentsPickerProps> =
       ) : (
         <div
           onClick={() => !disabled && inputRef.current?.click()}
-          className="border border-dashed border-slate-300 bg-white/70 hover:bg-white rounded-xl py-3 px-4 text-center text-[11px] text-slate-500 cursor-pointer transition-colors"
+          className="border border-dashed border-slate-300 dark:border-[#004B87] bg-white/70 dark:bg-[#0B1D35] hover:bg-white dark:hover:bg-[#002B54]/70 rounded-xl py-3 px-4 text-center text-[11px] text-slate-500 dark:text-slate-300 cursor-pointer transition-colors"
         >
           لا توجد مستندات مرفقة حتى الآن — اضغط لاختيار ملفات (PDF، صور، Word، Excel)
         </div>
@@ -367,8 +367,8 @@ export const ReplyAttachmentTrigger: React.FC<ReplyAttachmentTriggerProps> = ({
 
   const btnClasses =
     variant === 'blue'
-      ? 'text-blue-800 bg-blue-100 hover:bg-blue-200 border border-blue-300'
-      : 'text-emerald-800 bg-emerald-100 hover:bg-emerald-200 border border-emerald-300';
+      ? 'text-blue-800 dark:text-sky-200 bg-blue-100 dark:bg-blue-950/60 hover:bg-blue-200 dark:hover:bg-blue-900 border border-blue-300 dark:border-blue-700'
+      : 'text-emerald-800 dark:text-emerald-200 bg-emerald-100 dark:bg-emerald-950/60 hover:bg-emerald-200 dark:hover:bg-emerald-900 border border-emerald-300 dark:border-emerald-700';
 
   return (
     <>
@@ -435,11 +435,11 @@ export const CaseAttachmentsManager: React.FC<CaseAttachmentsManagerProps> = ({
   };
 
   return (
-    <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-2.5">
+    <div className="bg-slate-50 dark:bg-[#071629] p-3.5 rounded-xl border border-slate-200 dark:border-[#00386B] space-y-2.5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <Paperclip className="w-4 h-4 text-[#004B87]" />
-          <span className="font-bold text-slate-900">المستندات والمرفقات ({attachments.length})</span>
+          <Paperclip className="w-4 h-4 text-[#004B87] dark:text-[#00E676]" />
+          <span className="font-bold text-slate-900 dark:text-white">المستندات والمرفقات ({attachments.length})</span>
         </div>
 
         {canEdit && (
@@ -475,7 +475,7 @@ export const CaseAttachmentsManager: React.FC<CaseAttachmentsManagerProps> = ({
       </div>
 
       {attachments.length === 0 ? (
-        <div className="bg-white border border-dashed border-slate-300 rounded-xl p-3 text-center text-slate-500 text-xs">
+        <div className="bg-white dark:bg-[#0B1D35] border border-dashed border-slate-300 dark:border-[#004B87] rounded-xl p-3 text-center text-slate-500 dark:text-slate-400 text-xs">
           لا توجد مستندات مرفقة بهذه الحالة حتى الآن.
         </div>
       ) : (
@@ -490,12 +490,12 @@ export const CaseAttachmentsManager: React.FC<CaseAttachmentsManagerProps> = ({
             return (
               <div
                 key={att.id}
-                className="bg-white border border-slate-200 rounded-xl p-2.5 flex items-center justify-between gap-2 shadow-2xs"
+                className="bg-white dark:bg-[#0B1D35] border border-slate-200 dark:border-[#004B87] rounded-xl p-2.5 flex items-center justify-between gap-2 shadow-2xs"
               >
                 <div className="flex items-start gap-2 min-w-0">
                   <div className="mt-0.5">{getFileIcon(att.mimeType, att.fileName)}</div>
                   <div className="min-w-0">
-                    <div className="font-bold text-slate-900 text-xs truncate" title={att.fileName}>
+                    <div className="font-bold text-slate-900 dark:text-white text-xs truncate" title={att.fileName}>
                       {att.fileName}
                     </div>
                     <div className="flex flex-wrap items-center gap-1.5 mt-1">
@@ -506,7 +506,7 @@ export const CaseAttachmentsManager: React.FC<CaseAttachmentsManagerProps> = ({
                       >
                         {stageLabel}
                       </span>
-                      <span className="text-[10px] text-slate-500">
+                      <span className="text-[10px] text-slate-500 dark:text-slate-400">
                         {formatFileSizeArabic(att.sizeBytes)}
                       </span>
                     </div>
@@ -530,7 +530,7 @@ export const CaseAttachmentsManager: React.FC<CaseAttachmentsManagerProps> = ({
                         subtitle: `${stageLabel} · ${att.uploadedByName}`,
                       })
                     }
-                    className="p-1.5 text-[#004B87] hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
+                    className="p-1.5 text-[#004B87] dark:text-sky-300 hover:bg-blue-50 dark:hover:bg-[#002B54] rounded-lg transition-colors cursor-pointer"
                     title="معاينة"
                   >
                     <Eye className="w-3.5 h-3.5" />
@@ -539,7 +539,7 @@ export const CaseAttachmentsManager: React.FC<CaseAttachmentsManagerProps> = ({
                   <a
                     href={downloadUrl}
                     download={att.fileName}
-                    className="p-1.5 text-[#00A651] hover:bg-emerald-50 rounded-lg transition-colors"
+                    className="p-1.5 text-[#00A651] dark:text-[#00E676] hover:bg-emerald-50 dark:hover:bg-emerald-950/50 rounded-lg transition-colors"
                     title="تحميل المستند"
                   >
                     <Download className="w-3.5 h-3.5" />
@@ -547,12 +547,12 @@ export const CaseAttachmentsManager: React.FC<CaseAttachmentsManagerProps> = ({
 
                   {canEdit &&
                     (isConfirming ? (
-                      <div className="flex items-center gap-1 bg-rose-50 border border-rose-200 rounded-lg px-1.5 py-0.5">
+                      <div className="flex items-center gap-1 bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-700 rounded-lg px-1.5 py-0.5">
                         <button
                           type="button"
                           disabled={isDeleting}
                           onClick={() => void handleConfirmDelete(att.id)}
-                          className="text-[10px] font-bold text-rose-700 hover:text-rose-900 flex items-center gap-0.5 cursor-pointer"
+                          className="text-[10px] font-bold text-rose-700 dark:text-rose-200 hover:text-rose-900 dark:hover:text-white flex items-center gap-0.5 cursor-pointer"
                           title="تأكيد الحذف"
                         >
                           {isDeleting ? (
@@ -566,7 +566,7 @@ export const CaseAttachmentsManager: React.FC<CaseAttachmentsManagerProps> = ({
                           type="button"
                           disabled={isDeleting}
                           onClick={() => setConfirmDeleteId(null)}
-                          className="text-[10px] text-slate-500 hover:text-slate-800 cursor-pointer"
+                          className="text-[10px] text-slate-500 dark:text-slate-300 hover:text-slate-800 dark:hover:text-white cursor-pointer"
                         >
                           إلغاء
                         </button>
@@ -575,7 +575,7 @@ export const CaseAttachmentsManager: React.FC<CaseAttachmentsManagerProps> = ({
                       <button
                         type="button"
                         onClick={() => setConfirmDeleteId(att.id)}
-                        className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                        className="p-1.5 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-lg transition-colors cursor-pointer"
                         title="حذف المرفق"
                       >
                         <Trash2 className="w-3.5 h-3.5" />

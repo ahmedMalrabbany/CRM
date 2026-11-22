@@ -1,5 +1,5 @@
 /**
- * Cell codec: one Firestore field <-> one spreadsheet cell (type-safe round trip).
+ * Cell codec: one document field <-> one spreadsheet cell (type-safe round trip).
  *  - numbers / booleans are stored natively
  *  - plain strings are stored as-is
  *  - "", null, objects, arrays and strings starting with § are stored as  §:<json>

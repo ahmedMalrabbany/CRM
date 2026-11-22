@@ -15,6 +15,13 @@ import compression from 'compression';
 import { Store } from './server/db/store.ts';
 import { FileDriver } from './server/db/fileDriver.ts';
 import { createDbRouter, createDriverFromEnv } from './server/db/routes.ts';
+import {
+  TARGET_SPREADSHEET_ID,
+  TARGET_DETAILS_TAB,
+  decodeDetailsRowsToCases,
+  encodeCasesToDetailsRows,
+  type MappableCaseField,
+} from './src/utils/sheetsDetailsMapper.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -152,7 +159,7 @@ async function startServer() {
   );
   app.use(express.json({ limit: '25mb' }));
 
-  // ---- Database: in-memory store synced to Google Sheets (replaces Firestore) ----
+  // ---- Database: in-memory store synced to Google Sheets ----
   const dataDir = path.resolve(__dirname, 'data');
   let dbStore = new Store(createDriverFromEnv(dataDir));
   try {
@@ -1001,7 +1008,237 @@ async function startServer() {
     }
   });
 
-  // Case Document Attachments Endpoints (stored on server disk, metadata in Firestore)
+  // Google Sheets `Details` Tab Proxy Endpoints (uses user OAuth Bearer token)
+  const extractBearerToken = (req: Request): string => {
+    const authHeader = String(req.headers.authorization || '').trim();
+    if (authHeader.toLowerCase().startsWith('bearer ')) {
+      return authHeader.slice(7).trim();
+    }
+    return '';
+  };
+
+  const fetchGoogleSheetsJson = async (url: string, token: string, init: RequestInit = {}) => {
+    const headers = new Headers(init.headers || {});
+    headers.set('Authorization', `Bearer ${token}`);
+    if (init.body && !headers.has('Content-Type')) {
+      headers.set('Content-Type', 'application/json');
+    }
+    const resp = await fetch(url, { ...init, headers });
+    const rawText = await resp.text();
+    let data: any = null;
+    try {
+      data = rawText ? JSON.parse(rawText) : {};
+    } catch {
+      data = { raw: rawText };
+    }
+    if (!resp.ok) {
+      const msg = data?.error?.message || rawText || `Google Sheets API error (${resp.status})`;
+      const err: any = new Error(msg);
+      err.status = resp.status;
+      throw err;
+    }
+    return data;
+  };
+
+  app.get('/api/sheets/details', async (req: Request, res: Response) => {
+    try {
+      const token = extractBearerToken(req);
+      if (!token) {
+        res.status(401).json({ error: 'GOOGLE_AUTH_REQUIRED' });
+        return;
+      }
+
+      const spreadsheetId =
+        String(req.query.spreadsheetId || '').trim() || TARGET_SPREADSHEET_ID;
+      const requestedTab =
+        String(req.query.tabName || '').trim() || TARGET_DETAILS_TAB;
+
+      let customFieldMap: Record<string, MappableCaseField | ''> | undefined;
+      if (typeof req.query.customMap === 'string' && req.query.customMap.trim()) {
+        try {
+          customFieldMap = JSON.parse(req.query.customMap);
+        } catch {
+          customFieldMap = undefined;
+        }
+      }
+
+      const fields = encodeURIComponent(
+        'spreadsheetId,properties.title,spreadsheetUrl,sheets.properties(sheetId,title)'
+      );
+      const meta = await fetchGoogleSheetsJson(
+        `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}?fields=${fields}`,
+        token
+      );
+
+      const sheetsList: Array<{ sheetId: number; title: string }> = Array.isArray(meta.sheets)
+        ? meta.sheets.map((s: any) => ({
+            sheetId: Number(s.properties?.sheetId ?? 0),
+            title: String(s.properties?.title || ''),
+          }))
+        : [];
+
+      const matchedTab =
+        sheetsList.find((s) => s.title === requestedTab) ||
+        sheetsList.find((s) => s.title.toLowerCase() === requestedTab.toLowerCase()) ||
+        sheetsList.find((s) => s.title.toLowerCase() === 'details');
+
+      let rawRows: any[][] = [];
+      if (matchedTab) {
+        const range = `'${matchedTab.title.replace(/'/g, "''")}'!A1:AZ2000`;
+        const valuesData = await fetchGoogleSheetsJson(
+          `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(meta.spreadsheetId)}/values/${encodeURIComponent(range)}?valueRenderOption=UNFORMATTED_VALUE`,
+          token
+        );
+        rawRows = Array.isArray(valuesData.values) ? valuesData.values : [];
+      }
+
+      const decoded = decodeDetailsRowsToCases(rawRows, customFieldMap);
+
+      res.json({
+        spreadsheetId: meta.spreadsheetId,
+        title: meta.properties?.title || meta.spreadsheetId,
+        spreadsheetUrl:
+          meta.spreadsheetUrl ||
+          `https://docs.google.com/spreadsheets/d/${meta.spreadsheetId}/edit`,
+        sheets: sheetsList,
+        detailsTabTitle: matchedTab?.title || requestedTab,
+        hasDetailsTab: Boolean(matchedTab),
+        headers: decoded.schema.headers,
+        rows: rawRows,
+        schema: decoded.schema,
+        cases: decoded.cases,
+        rowNumbersByCaseId: decoded.rowNumbersByCaseId,
+      });
+    } catch (err: any) {
+      const status = typeof err?.status === 'number' ? err.status : 500;
+      res.status(status).json({
+        error: err?.message || 'تعذر قراءة ورقة Details من Google Sheets.',
+      });
+    }
+  });
+
+  app.post('/api/sheets/details/sync', async (req: Request, res: Response) => {
+    try {
+      const token = extractBearerToken(req);
+      if (!token) {
+        res.status(401).json({ error: 'GOOGLE_AUTH_REQUIRED' });
+        return;
+      }
+
+      const {
+        spreadsheetId: rawSpreadsheetId,
+        tabName: rawTabName,
+        cases,
+        includeMissingColumns,
+        customFieldMap,
+      } = (req.body || {}) as {
+        spreadsheetId?: string;
+        tabName?: string;
+        cases?: any[];
+        includeMissingColumns?: boolean;
+        customFieldMap?: Record<string, MappableCaseField | ''>;
+      };
+
+      if (!Array.isArray(cases)) {
+        res.status(400).json({ error: 'بيانات الحالات المطلوب مزامنتها غير صالحة.' });
+        return;
+      }
+
+      const spreadsheetId = String(rawSpreadsheetId || '').trim() || TARGET_SPREADSHEET_ID;
+      const requestedTab = String(rawTabName || '').trim() || TARGET_DETAILS_TAB;
+
+      const fields = encodeURIComponent(
+        'spreadsheetId,properties.title,spreadsheetUrl,sheets.properties(sheetId,title)'
+      );
+      const meta = await fetchGoogleSheetsJson(
+        `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}?fields=${fields}`,
+        token
+      );
+
+      const sheetsList: Array<{ sheetId: number; title: string }> = Array.isArray(meta.sheets)
+        ? meta.sheets.map((s: any) => ({
+            sheetId: Number(s.properties?.sheetId ?? 0),
+            title: String(s.properties?.title || ''),
+          }))
+        : [];
+
+      const matchedTab =
+        sheetsList.find((s) => s.title === requestedTab) ||
+        sheetsList.find((s) => s.title.toLowerCase() === requestedTab.toLowerCase());
+
+      const targetTabTitle = matchedTab?.title || requestedTab;
+      let existingRows: any[][] = [];
+
+      if (!matchedTab) {
+        await fetchGoogleSheetsJson(
+          `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(meta.spreadsheetId)}:batchUpdate`,
+          token,
+          {
+            method: 'POST',
+            body: JSON.stringify({
+              requests: [{ addSheet: { properties: { title: targetTabTitle } } }],
+            }),
+          }
+        );
+      } else {
+        const readRange = `'${targetTabTitle.replace(/'/g, "''")}'!A1:AZ2000`;
+        const valuesData = await fetchGoogleSheetsJson(
+          `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(meta.spreadsheetId)}/values/${encodeURIComponent(readRange)}?valueRenderOption=UNFORMATTED_VALUE`,
+          token
+        );
+        existingRows = Array.isArray(valuesData.values) ? valuesData.values : [];
+      }
+
+      const existingHeaders =
+        existingRows.length > 0
+          ? existingRows[0].map((h: any) => String(h ?? '').trim())
+          : [];
+
+      const encoded = encodeCasesToDetailsRows(cases as any[], existingHeaders, existingRows, {
+        includeMissingColumns: Boolean(includeMissingColumns),
+        customFieldMap,
+      });
+
+      const quotedTab = `'${targetTabTitle.replace(/'/g, "''")}'`;
+      await fetchGoogleSheetsJson(
+        `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(meta.spreadsheetId)}/values/${encodeURIComponent(`${quotedTab}!A1:AZ`)}:clear`,
+        token,
+        { method: 'POST', body: JSON.stringify({}) }
+      );
+
+      await fetchGoogleSheetsJson(
+        `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(meta.spreadsheetId)}/values/${encodeURIComponent(`${quotedTab}!A1`)}?valueInputOption=RAW`,
+        token,
+        {
+          method: 'PUT',
+          body: JSON.stringify({
+            range: `${quotedTab}!A1`,
+            majorDimension: 'ROWS',
+            values: encoded.rows,
+          }),
+        }
+      );
+
+      res.json({
+        ok: true,
+        spreadsheetId: meta.spreadsheetId,
+        spreadsheetUrl:
+          meta.spreadsheetUrl ||
+          `https://docs.google.com/spreadsheets/d/${meta.spreadsheetId}/edit`,
+        tabTitle: targetTabTitle,
+        headers: encoded.headers,
+        totalRows: Math.max(0, encoded.rows.length - 1),
+        schema: encoded.schema,
+      });
+    } catch (err: any) {
+      const status = typeof err?.status === 'number' ? err.status : 500;
+      res.status(status).json({
+        error: err?.message || 'تعذر مزامنة البيانات مع تبويب Details في Google Sheets.',
+      });
+    }
+  });
+
+  // Case Document Attachments Endpoints (stored on server disk, metadata in Sheets DB)
   app.post('/api/attachments/upload', async (req: Request, res: Response) => {
     try {
       const { fileName, mimeType, dataBase64 } = req.body as {

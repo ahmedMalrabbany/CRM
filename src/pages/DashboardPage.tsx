@@ -21,9 +21,12 @@ import {
   LayoutList,
   Kanban,
   ArrowUpRight,
+  AlertCircle,
+  X,
 } from 'lucide-react';
 import { Case, User } from '../types';
 import { useThemeLanguage } from '../context/ThemeLanguageContext';
+import { useAuth } from '../context/AuthContext';
 import {
   Sparkline,
   StatusBadge,
@@ -38,6 +41,10 @@ import {
   isCaseOwnedByUser,
   isCaseOverdue72Hours,
 } from '../services/caseService';
+import {
+  buildDailySparklineSeries,
+  computeTrendDelta,
+} from '../utils/analyticsUtils';
 
 interface DashboardPageProps {
   cases: Case[];
@@ -61,10 +68,15 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   isLoadingCases = false,
 }) => {
   const { language, t } = useThemeLanguage();
+  const { systemHotline } = useAuth();
   const [dateRange, setDateRange] = useState<'today' | 'week' | 'month' | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'table' | 'kanban'>('table');
   const [claimingId, setClaimingId] = useState<string | null>(null);
+  const [claimFeedback, setClaimFeedback] = useState<{
+    type: 'success' | 'error';
+    message: string;
+  } | null>(null);
 
   // Date filtering logic
   const filteredByDate = useMemo(() => {
@@ -152,19 +164,28 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
     };
   }, [filteredByDate, currentUser]);
 
-  // Compute 7-point sparkline series from real case timestamps (or realistic baseline if few cases)
-  const sparklineSeries = useMemo(() => {
-    const bucketsTotal = [3, 5, 4, 7, 6, 9, Math.max(totalCount, 8)];
-    const bucketsOpen = [2, 3, 4, 3, 5, 4, Math.max(openCount, 3)];
-    const bucketsIncoming = [1, 2, 1, 3, 2, 4, Math.max(incomingCount, 2)];
-    const bucketsClosed = [2, 4, 5, 6, 8, 10, Math.max(closedCount, 6)];
+  // Compute 7-day sparkline series and real window-over-window trend deltas
+  const sparklineSeries = useMemo(
+    () => buildDailySparklineSeries(cases, 7),
+    [cases]
+  );
+
+  const trends = useMemo(() => {
+    const windowDays = dateRange === 'today' ? 1 : dateRange === 'month' ? 30 : 7;
     return {
-      total: bucketsTotal,
-      open: bucketsOpen,
-      incoming: bucketsIncoming,
-      closed: bucketsClosed,
+      total: computeTrendDelta(cases, () => true, windowDays),
+      open: computeTrendDelta(cases, (c) => c.status !== 'مغلقة', windowDays),
+      incoming: computeTrendDelta(
+        cases,
+        (c) =>
+          c.status === 'محولة للإدارة' ||
+          c.status === 'محولة للدعم الفني' ||
+          c.status === 'محولة للدعم التقني',
+        windowDays
+      ),
+      closed: computeTrendDelta(cases, (c) => c.status === 'مغلقة', windowDays),
     };
-  }, [totalCount, openCount, incomingCount, closedCount]);
+  }, [cases, dateRange]);
 
   // Breakdown by Tax Type
   const incomeTaxCases = filteredByDate.filter((c) => c.taxType === 'ضرائب دخل').length;
@@ -220,11 +241,24 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
 
   const handleQuickClaim = async (e: React.MouseEvent, c: Case) => {
     e.stopPropagation();
+    setClaimFeedback(null);
     try {
       setClaimingId(c.id);
       await claimCase(c.id, currentUser);
-    } catch (err) {
-      console.error(err);
+      setClaimFeedback({
+        type: 'success',
+        message:
+          language === 'ar'
+            ? `تم سحب الحالة ${c.caseId} إلى حسابك بنجاح.`
+            : `Claimed case ${c.caseId} successfully.`,
+      });
+    } catch (err: any) {
+      setClaimFeedback({
+        type: 'error',
+        message:
+          err?.message ||
+          (language === 'ar' ? 'تعذر سحب الحالة.' : 'Failed to claim case.'),
+      });
     } finally {
       setClaimingId(null);
     }
@@ -238,7 +272,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           <div className="flex items-center gap-2 text-[#00E676] text-xs font-semibold mb-1">
             <span>{t('appTitle')}</span>
             <span aria-hidden="true">·</span>
-            <span className="font-mono tabular-nums">16395</span>
+            <span className="font-mono tabular-nums">{systemHotline}</span>
           </div>
           <h1 className="text-xl md:text-2xl font-black text-white tracking-tight">
             {t('welcomeUser')} {currentUser.fullName}
@@ -286,6 +320,32 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           </button>
         </div>
       </div>
+
+      {claimFeedback && (
+        <div
+          className={`p-3 rounded-xl border text-xs font-bold flex items-center justify-between gap-2 animate-scale-in ${
+            claimFeedback.type === 'success'
+              ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-300'
+              : 'bg-rose-500/10 border-rose-500/30 text-rose-700 dark:text-rose-300'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            {claimFeedback.type === 'success' ? (
+              <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+            ) : (
+              <AlertCircle className="w-4 h-4 text-rose-500 shrink-0" />
+            )}
+            <span>{claimFeedback.message}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setClaimFeedback(null)}
+            className="p-1 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 cursor-pointer"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* Top Workspace: Latest Registered Cases (Smart Data Table OR Kanban Pipeline Board) */}
       <div className="bg-white/92 dark:bg-[#0B1D35]/92 backdrop-blur-md rounded-2xl border border-slate-200 dark:border-[#00386B] shadow-saas overflow-hidden">
@@ -643,9 +703,21 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                     <span className="text-2xl font-black text-slate-900 dark:text-white font-mono tabular-nums">
                       {totalCount}
                     </span>
-                    <span className="inline-flex items-center gap-0.5 text-[11px] font-mono font-bold text-[#00A651] dark:text-[#00E676] tabular-nums">
-                      <TrendingUp className="w-3 h-3" />
-                      +12.4%
+                    <span
+                      className={`inline-flex items-center gap-0.5 text-[11px] font-mono font-bold tabular-nums ${
+                        trends.total.direction === 'down'
+                          ? 'text-rose-600 dark:text-rose-400'
+                          : trends.total.direction === 'flat'
+                          ? 'text-slate-500 dark:text-slate-400'
+                          : 'text-[#00A651] dark:text-[#00E676]'
+                      }`}
+                    >
+                      {trends.total.direction === 'down' ? (
+                        <TrendingDown className="w-3 h-3" />
+                      ) : (
+                        <TrendingUp className="w-3 h-3" />
+                      )}
+                      {trends.total.label}
                     </span>
                   </div>
                   <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
@@ -677,8 +749,12 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                       {openCount}
                     </span>
                     <span className="inline-flex items-center gap-0.5 text-[11px] font-mono font-bold text-amber-600 dark:text-amber-400 tabular-nums">
-                      <TrendingUp className="w-3 h-3" />
-                      +5.2%
+                      {trends.open.direction === 'down' ? (
+                        <TrendingDown className="w-3 h-3" />
+                      ) : (
+                        <TrendingUp className="w-3 h-3" />
+                      )}
+                      {trends.open.label}
                     </span>
                   </div>
                   <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
@@ -710,8 +786,12 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                       {incomingCount}
                     </span>
                     <span className="inline-flex items-center gap-0.5 text-[11px] font-mono font-bold text-[#00A651] dark:text-[#00E676] tabular-nums">
-                      <TrendingDown className="w-3 h-3" />
-                      -4.1%
+                      {trends.incoming.direction === 'down' ? (
+                        <TrendingDown className="w-3 h-3" />
+                      ) : (
+                        <TrendingUp className="w-3 h-3" />
+                      )}
+                      {trends.incoming.label}
                     </span>
                   </div>
                   <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
@@ -746,8 +826,12 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                       ({resolutionRate}%)
                     </span>
                     <span className="inline-flex items-center gap-0.5 text-[11px] font-mono font-bold text-[#00A651] dark:text-[#00E676] tabular-nums">
-                      <TrendingUp className="w-3 h-3" />
-                      +18.6%
+                      {trends.closed.direction === 'down' ? (
+                        <TrendingDown className="w-3 h-3" />
+                      ) : (
+                        <TrendingUp className="w-3 h-3" />
+                      )}
+                      {trends.closed.label}
                     </span>
                   </div>
                   <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
